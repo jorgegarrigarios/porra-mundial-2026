@@ -28,15 +28,46 @@ const links = [
   { href: "/reglas", label: "Reglas", icon: Shield },
 ];
 
+type ParticipanteNavbar = {
+  role?: string | null;
+  nickname?: string | null;
+  nombre?: string | null;
+};
+
+function obtenerNombreVisible(
+  participante: ParticipanteNavbar | null,
+  email?: string | null
+) {
+  return (
+    participante?.nickname?.trim() ||
+    participante?.nombre?.trim() ||
+    email?.trim() ||
+    "Usuario"
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [email, setEmail] = useState<string | null>(null);
+  const [nombreVisible, setNombreVisible] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+
+    async function cargarUsuario(userId: string, email?: string | null) {
+      const { data: participante } = await supabase
+        .from("participantes")
+        .select("role, nickname, nombre")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+
+      if (!mounted) return;
+
+      setNombreVisible(obtenerNombreVisible(participante, email));
+      setIsAdmin(participante?.role === "admin");
+    }
 
     async function cargarSesion() {
       try {
@@ -48,22 +79,13 @@ export default function Navbar() {
 
         const user = session?.user;
 
-        setEmail(user?.email ?? null);
-
         if (!user) {
+          setNombreVisible(null);
           setIsAdmin(false);
           return;
         }
 
-        const { data: participante } = await supabase
-          .from("participantes")
-          .select("role")
-          .eq("auth_user_id", user.id)
-          .maybeSingle();
-
-        if (!mounted) return;
-
-        setIsAdmin(participante?.role === "admin");
+        await cargarUsuario(user.id, user.email);
       } catch (error) {
         console.error("Error cargando sesión navbar:", error);
       }
@@ -78,22 +100,13 @@ export default function Navbar() {
 
       const user = session?.user;
 
-      setEmail(user?.email ?? null);
-
       if (!user) {
+        setNombreVisible(null);
         setIsAdmin(false);
         return;
       }
 
-      const { data: participante } = await supabase
-        .from("participantes")
-        .select("role")
-        .eq("auth_user_id", user.id)
-        .maybeSingle();
-
-      if (!mounted) return;
-
-      setIsAdmin(participante?.role === "admin");
+      await cargarUsuario(user.id, user.email);
     });
 
     return () => {
@@ -146,13 +159,17 @@ export default function Navbar() {
           </div>
 
           <div className="rightSide">
+            {nombreVisible && (
+              <div className="userBadge" title={nombreVisible}>
+                {nombreVisible}
+              </div>
+            )}
+
             {isAdmin && (
               <Link
                 href="/admin/ligas"
                 className={`adminButton ${
-                  pathname.startsWith("/admin")
-                    ? "activeAdminButton"
-                    : ""
+                  pathname.startsWith("/admin") ? "activeAdminButton" : ""
                 }`}
               >
                 <Shield size={17} />
@@ -160,7 +177,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {email ? (
+            {nombreVisible ? (
               <button onClick={cerrarSesion} className="authButton logout">
                 <LogOut size={17} />
                 Salir
@@ -184,9 +201,7 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`mobileLink ${
-                active ? "activeMobileLink" : ""
-              }`}
+              className={`mobileLink ${active ? "activeMobileLink" : ""}`}
             >
               <Icon size={22} />
               <span>{link.label}</span>
@@ -196,13 +211,17 @@ export default function Navbar() {
       </nav>
 
       <div className="mobileTopActions">
+        {nombreVisible && (
+          <div className="mobileUserBadge" title={nombreVisible}>
+            {nombreVisible}
+          </div>
+        )}
+
         {isAdmin && (
           <Link
             href="/admin/ligas"
             className={`mobileTopButton ${
-              pathname.startsWith("/admin")
-                ? "activeMobileTopButton"
-                : ""
+              pathname.startsWith("/admin") ? "activeMobileTopButton" : ""
             }`}
           >
             <Shield size={18} />
@@ -210,7 +229,7 @@ export default function Navbar() {
           </Link>
         )}
 
-        {email ? (
+        {nombreVisible ? (
           <button onClick={cerrarSesion} className="mobileTopButton">
             <LogOut size={18} />
             Salir
@@ -234,13 +253,13 @@ export default function Navbar() {
         }
 
         .navInner {
-          max-width: 1280px;
+          max-width: 1360px;
           margin: 0 auto;
           padding: 14px 24px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 24px;
+          gap: 36px;
         }
 
         .brand {
@@ -295,7 +314,26 @@ export default function Navbar() {
         .rightSide {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 14px;
+          margin-left: 12px;
+        }
+
+        .userBadge {
+          max-width: 150px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #dbeafe;
+          background: rgba(37,99,235,0.14);
+          border: 1px solid rgba(96,165,250,0.28);
+          border-radius: 999px;
+          padding: 0 16px;
+          height: 52px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 900;
+          font-size: 14px;
         }
 
         .authButton,
@@ -364,6 +402,10 @@ export default function Navbar() {
             padding: 10px 12px;
             font-size: 14px;
           }
+
+          .userBadge {
+            max-width: 110px;
+          }
         }
 
         @media (max-width: 860px) {
@@ -419,6 +461,7 @@ export default function Navbar() {
             gap: 8px;
           }
 
+          .mobileUserBadge,
           .mobileTopButton {
             display: inline-flex;
             align-items: center;
@@ -433,6 +476,16 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             font-family: inherit;
             font-size: 14px;
+          }
+
+          .mobileUserBadge {
+            max-width: 105px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #dbeafe;
+            background: rgba(37,99,235,0.22);
+            border-color: rgba(96,165,250,0.34);
           }
 
           .activeMobileTopButton {

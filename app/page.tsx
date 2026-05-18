@@ -1,8 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import {
   Trophy,
-  Star,
   CalendarDays,
   TrendingUp,
   Target,
@@ -10,10 +12,130 @@ import {
   ArrowRight,
   Zap,
   CheckCircle2,
-  BarChart3,
+  Users,
+  Shield,
 } from "lucide-react";
 
+import { supabase } from "@/lib/supabase";
+
+type HomeStats = {
+  partidos: number | null;
+  participantes: number | null;
+  pronosticos: number | null;
+  ligasActivas: number | null;
+};
+
+type PartidoDestacado = {
+  id: number;
+  local: string;
+  visitante: string;
+  local_code: string | null;
+  visitante_code: string | null;
+  fecha_inicio: string | null;
+  estadio: string | null;
+  ciudad: string | null;
+  grupo: string | null;
+  fase: string | null;
+};
+
 export default function Home() {
+  const [stats, setStats] = useState<HomeStats>({
+    partidos: null,
+    participantes: null,
+    pronosticos: null,
+    ligasActivas: null,
+  });
+
+  const [partidoDestacado, setPartidoDestacado] =
+    useState<PartidoDestacado | null>(null);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    cargarDatosHome();
+  }, []);
+
+  async function cargarDatosHome() {
+    setLoading(true);
+
+    try {
+      const [
+        partidosResponse,
+        participantesResponse,
+        pronosticosResponse,
+        ligasResponse,
+        proximoPartidoResponse,
+      ] = await Promise.all([
+        supabase.from("partidos").select("*", { count: "exact", head: true }),
+        supabase
+          .from("participantes")
+          .select("*", { count: "exact", head: true }),
+        supabase
+          .from("pronosticos")
+          .select("*", { count: "exact", head: true }),
+        supabase
+          .from("ligas")
+          .select("*", { count: "exact", head: true })
+          .eq("estado", "activa"),
+        supabase
+          .from("partidos")
+          .select(
+            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase"
+          )
+          .gte("fecha_inicio", new Date().toISOString())
+          .order("fecha_inicio", { ascending: true, nullsFirst: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      setStats({
+        partidos: partidosResponse.count ?? 0,
+        participantes: participantesResponse.count ?? 0,
+        pronosticos: pronosticosResponse.count ?? 0,
+        ligasActivas: ligasResponse.count ?? 0,
+      });
+
+      setPartidoDestacado(proximoPartidoResponse.data ?? null);
+    } catch (error) {
+      console.error("Error cargando datos de inicio:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatearFecha(fechaInicio: string | null) {
+    if (!fechaInicio) return "Fecha pendiente";
+
+    const fecha = new Date(fechaInicio);
+
+    if (Number.isNaN(fecha.getTime())) return "Fecha pendiente";
+
+    return fecha.toLocaleDateString("es-ES", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function formatearHora(fechaInicio: string | null) {
+    if (!fechaInicio) return "--:--";
+
+    const fecha = new Date(fechaInicio);
+
+    if (Number.isNaN(fecha.getTime())) return "--:--";
+
+    return fecha.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function valorStat(valor: number | null) {
+    if (loading) return "…";
+    return valor !== null ? valor.toString() : "0";
+  }
+
   return (
     <main className="home">
       <section className="hero">
@@ -60,90 +182,188 @@ export default function Home() {
 
       <section className="contentWrap">
         <div className="statsGrid">
-          <StatCard icon={<Trophy size={28} />} title="Mi posición" value="3º" detail="de 12 participantes" color="#2563eb" />
-          <StatCard icon={<Star size={28} />} title="Mis puntos" value="245" detail="puntos totales" color="#16a34a" />
-          <StatCard icon={<CalendarDays size={28} />} title="Partidos jugados" value="18" detail="de 64" color="#7c3aed" />
-          <StatCard icon={<TrendingUp size={28} />} title="Acierto" value="68%" detail="promedio general" color="#f59e0b" />
+          <StatCard
+            icon={<CalendarDays size={28} />}
+            title="Partidos cargados"
+            value={valorStat(stats.partidos)}
+            detail="calendario oficial"
+            color="#2563eb"
+          />
+
+          <StatCard
+            icon={<Users size={28} />}
+            title="Participantes"
+            value={valorStat(stats.participantes)}
+            detail="usuarios registrados"
+            color="#16a34a"
+          />
+
+          <StatCard
+            icon={<Target size={28} />}
+            title="Pronósticos"
+            value={valorStat(stats.pronosticos)}
+            detail="predicciones guardadas"
+            color="#7c3aed"
+          />
+
+          <StatCard
+            icon={<Trophy size={28} />}
+            title="Ligas activas"
+            value={valorStat(stats.ligasActivas)}
+            detail="competiciones privadas"
+            color="#f59e0b"
+          />
         </div>
 
         <h2 className="sectionTitle">Accesos rápidos</h2>
 
         <div className="quickGrid">
-          <QuickCard href="/partidos" icon={<CalendarDays size={36} />} title="Ver Partidos" text="Consulta todos los partidos del Mundial 2026." color="#2563eb" />
-          <QuickCard href="/mis-pronosticos" icon={<Target size={36} />} title="Hacer Pronósticos" text="Realiza tus predicciones y suma puntos." color="#16a34a" />
-          <QuickCard href="/ranking" icon={<Crown size={36} />} title="Ver Ranking" text="Compite por el primer puesto." color="#eab308" />
+          <QuickCard
+            href="/partidos"
+            icon={<CalendarDays size={36} />}
+            title="Ver Partidos"
+            text="Consulta todos los partidos del Mundial 2026."
+            color="#2563eb"
+          />
+
+          <QuickCard
+            href="/mis-pronosticos"
+            icon={<Target size={36} />}
+            title="Hacer Pronósticos"
+            text="Realiza tus predicciones antes de que empiece cada partido."
+            color="#16a34a"
+          />
+
+          <QuickCard
+            href="/ligas"
+            icon={<Users size={36} />}
+            title="Mis Ligas"
+            text="Crea ligas privadas o únete con un código."
+            color="#7c3aed"
+          />
         </div>
 
         <h2 className="sectionTitle">Próximo partido destacado</h2>
 
-        <div className="featuredMatch">
-          <div className="matchMain">
-            <Team code="ar" name="Argentina" />
+        {partidoDestacado ? (
+          <div className="featuredMatch">
+            <div className="matchMain">
+              <Team
+                code={partidoDestacado.local_code}
+                name={partidoDestacado.local}
+              />
 
-            <div className="matchCenter">
-              <div className="matchBadge">Fase de grupos · Grupo A</div>
-              <p className="muted">Jue 12 Jun 2026</p>
-              <p className="matchTime">21:00</p>
-              <p className="vs">VS</p>
-              <p className="muted">MetLife Stadium</p>
+              <div className="matchCenter">
+                <div className="matchBadge">
+                  {partidoDestacado.fase ?? "Fase pendiente"}
+                  {partidoDestacado.grupo
+                    ? ` · ${partidoDestacado.grupo}`
+                    : ""}
+                </div>
+
+                <p className="muted">
+                  {formatearFecha(partidoDestacado.fecha_inicio)}
+                </p>
+
+                <p className="matchTime">
+                  {formatearHora(partidoDestacado.fecha_inicio)}
+                </p>
+
+                <p className="vs">VS</p>
+
+                <p className="muted">
+                  {partidoDestacado.estadio ?? "Estadio pendiente"}
+                  {partidoDestacado.ciudad
+                    ? ` · ${partidoDestacado.ciudad}`
+                    : ""}
+                </p>
+              </div>
+
+              <Team
+                code={partidoDestacado.visitante_code}
+                name={partidoDestacado.visitante}
+              />
             </div>
 
-            <Team code="mx" name="México" />
-          </div>
+            <div className="matchAside">
+              <h3>¿Ya hiciste tu pronóstico?</h3>
 
-          <div className="matchAside">
-            <h3>¿Ya hiciste tu pronóstico?</h3>
-            <p>Acumula puntos y sube posiciones en el ranking.</p>
+              <p>Guarda tu resultado antes de que empiece el partido.</p>
 
-            <Link href="/mis-pronosticos" className="primaryButton">
-              <Target size={20} />
-              Hacer Pronóstico
-            </Link>
+              <Link href="/mis-pronosticos" className="primaryButton">
+                <Target size={20} />
+                Hacer Pronóstico
+              </Link>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="emptyFeatured">
+            No hay próximos partidos disponibles ahora mismo.
+          </div>
+        )}
 
         <div className="bottomGrid">
           <div className="panel">
             <h2 className="panelTitle">
-              <Trophy size={24} color="#facc15" />
-              Top 5 del ranking
+              <Crown size={24} color="#facc15" />
+              Competición
             </h2>
 
-            {[
-              ["1", "Diego", "312 pts"],
-              ["2", "María", "278 pts"],
-              ["3", "Jorge", "245 pts"],
-              ["4", "Carlos", "231 pts"],
-              ["5", "Ana", "211 pts"],
-            ].map(([pos, name, points]) => (
-              <div
-                key={pos}
-                className={`rankingRow ${name === "Jorge" ? "activeRow" : ""}`}
-              >
-                <span className="positionCircle">{pos}</span>
-                <span className="rankingName">{name}</span>
-                <span className="rankingPoints">{points}</span>
-              </div>
-            ))}
+            <InfoRow
+              icon={<CheckCircle2 size={22} />}
+              color="#16a34a"
+              title="Pronósticos reales"
+              text="Cada usuario guarda sus predicciones en Supabase."
+            />
+
+            <InfoRow
+              icon={<Trophy size={22} />}
+              color="#f59e0b"
+              title="Ranking automático"
+              text="La clasificación se calcula con los puntos de cada participante."
+            />
+
+            <InfoRow
+              icon={<Users size={22} />}
+              color="#2563eb"
+              title="Ligas privadas"
+              text="Puedes competir en grupos privados con tus amigos."
+            />
 
             <Link href="/ranking" className="outlineButton">
-              Ver ranking completo
+              Ver ranking
             </Link>
           </div>
 
           <div className="panel">
             <h2 className="panelTitle">
               <Zap size={24} color="#facc15" />
-              Actividad reciente
+              Sistema de puntos
             </h2>
 
-            <Activity icon={<CheckCircle2 size={22} />} color="#16a34a" text="¡Buen acierto! Predijiste correctamente Brasil 2 - 1 Colombia" time="Hace 2 horas" />
-            <Activity icon={<Star size={22} />} color="#7c3aed" text="Sumaste 15 puntos por tu pronóstico en España 3 - 0 Japón" time="Hace 1 día" />
-            <Activity icon={<CalendarDays size={22} />} color="#2563eb" text="Realizaste pronósticos para 8 partidos de la jornada" time="Hace 2 días" />
-            <Activity icon={<BarChart3 size={22} />} color="#f59e0b" text="Subiste al puesto 3 en el ranking" time="Hace 2 días" />
+            <InfoRow
+              icon={<Trophy size={22} />}
+              color="#f59e0b"
+              title="5 puntos"
+              text="Marcador exacto."
+            />
 
-            <Link href="/ranking" className="outlineButton">
-              Ver todas las actividades
+            <InfoRow
+              icon={<Target size={22} />}
+              color="#16a34a"
+              title="3 puntos"
+              text="Ganador o empate correcto."
+            />
+
+            <InfoRow
+              icon={<TrendingUp size={22} />}
+              color="#2563eb"
+              title="1 punto"
+              text="Diferencia de goles correcta."
+            />
+
+            <Link href="/reglas" className="outlineButton">
+              Ver reglas completas
             </Link>
           </div>
         </div>
@@ -151,18 +371,20 @@ export default function Home() {
         <div className="finalBanner">
           <div className="finalText">
             <div className="bigBlueIcon">
-              <Trophy size={34} />
+              <Shield size={34} />
             </div>
 
             <div>
-              <h2>¡Compite, diviértete y gana!</h2>
-              <p>La Porra Mundial 2026 te espera.</p>
+              <h2>V1 Beta ya disponible</h2>
+              <p>
+                Crea tu liga, invita a tus amigos y empieza a competir.
+              </p>
             </div>
           </div>
 
-          <Link href="/mis-pronosticos" className="primaryButton">
-            <Target size={20} />
-            Hacer mis pronósticos
+          <Link href="/ligas" className="primaryButton">
+            <Users size={20} />
+            Crear o unirme a una liga
           </Link>
         </div>
       </section>
@@ -319,17 +541,19 @@ export default function Home() {
           text-transform: uppercase;
           font-weight: 900;
           letter-spacing: 1px;
+          margin: 0;
         }
 
         .statValue {
           font-size: 34px;
           font-weight: 900;
-          margin-top: 4px;
+          margin: 4px 0 0;
         }
 
         .statDetail {
           color: #94a3b8;
           font-size: 14px;
+          margin: 0;
         }
 
         .sectionTitle {
@@ -369,6 +593,16 @@ export default function Home() {
           border-radius: 24px;
           overflow: hidden;
           background: linear-gradient(135deg, rgba(37,99,235,0.22), rgba(15,23,42,0.7));
+        }
+
+        .emptyFeatured {
+          background: rgba(15,23,42,0.82);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 24px;
+          padding: 30px;
+          text-align: center;
+          color: #94a3b8;
+          font-weight: 800;
         }
 
         .matchMain {
@@ -423,11 +657,13 @@ export default function Home() {
         .matchAside h3 {
           font-size: 22px;
           font-weight: 900;
+          margin: 0;
         }
 
         .matchAside p {
           color: #cbd5e1;
           line-height: 1.6;
+          margin: 0;
         }
 
         .flagCircle {
@@ -448,6 +684,12 @@ export default function Home() {
           height: 72px;
           border-radius: 999px;
           object-fit: cover;
+        }
+
+        .flagFallback {
+          color: #94a3b8;
+          font-size: 28px;
+          font-weight: 900;
         }
 
         .team {
@@ -483,41 +725,7 @@ export default function Home() {
           margin-bottom: 18px;
         }
 
-        .rankingRow {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 14px;
-          border-radius: 14px;
-          margin-top: 8px;
-          background: rgba(255,255,255,0.04);
-        }
-
-        .activeRow {
-          background: rgba(37,99,235,0.34);
-        }
-
-        .positionCircle {
-          width: 26px;
-          height: 26px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.14);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 900;
-        }
-
-        .rankingName {
-          font-weight: 800;
-        }
-
-        .rankingPoints {
-          margin-left: auto;
-          color: #dbeafe;
-        }
-
-        .activityRow {
+        .infoRow {
           display: flex;
           align-items: center;
           gap: 14px;
@@ -537,15 +745,16 @@ export default function Home() {
           flex-shrink: 0;
         }
 
-        .activityText {
-          color: #e5e7eb;
-          line-height: 1.5;
+        .infoTitle {
+          color: white;
+          font-weight: 900;
+          margin: 0 0 4px;
         }
 
-        .activityTime {
-          margin-left: auto;
-          color: #94a3b8;
-          white-space: nowrap;
+        .infoText {
+          color: #cbd5e1;
+          line-height: 1.5;
+          margin: 0;
         }
 
         .outlineButton {
@@ -581,6 +790,7 @@ export default function Home() {
         .finalText h2 {
           font-size: 26px;
           font-weight: 900;
+          margin: 0;
         }
 
         .finalText p {
@@ -690,14 +900,6 @@ export default function Home() {
           .sectionTitle {
             font-size: 26px;
           }
-
-          .activityRow {
-            align-items: flex-start;
-          }
-
-          .activityTime {
-            display: none;
-          }
         }
       `}</style>
     </main>
@@ -719,7 +921,10 @@ function StatCard({
 }) {
   return (
     <div className="statCard">
-      <div className="iconBox" style={{ background: color }}>{icon}</div>
+      <div className="iconBox" style={{ background: color }}>
+        {icon}
+      </div>
+
       <div>
         <p className="statLabel">{title}</p>
         <p className="statValue">{value}</p>
@@ -745,14 +950,25 @@ function QuickCard({
   return (
     <Link href={href} style={{ textDecoration: "none", color: "white" }}>
       <div className="quickCard">
-        <div className="quickIcon" style={{ background: color }}>{icon}</div>
+        <div className="quickIcon" style={{ background: color }}>
+          {icon}
+        </div>
+
         <h3 style={{ fontSize: "26px", fontWeight: 900, marginTop: "24px" }}>
           {title}
         </h3>
+
         <p style={{ color: "#cbd5e1", marginTop: "12px", lineHeight: 1.6 }}>
           {text}
         </p>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: "20px",
+          }}
+        >
           <ArrowRight size={30} />
         </div>
       </div>
@@ -760,33 +976,45 @@ function QuickCard({
   );
 }
 
-function Team({ code, name }: { code: string; name: string }) {
+function Team({ code, name }: { code: string | null; name: string }) {
+  const normalizedCode = code?.trim().toLowerCase();
+
   return (
     <div className="team">
       <div className="flagCircle">
-        <img src={`https://flagcdn.com/w160/${code}.png`} alt={name} />
+        {normalizedCode ? (
+          <img src={`https://flagcdn.com/w160/${normalizedCode}.png`} alt={name} />
+        ) : (
+          <span className="flagFallback">—</span>
+        )}
       </div>
+
       <p className="teamName">{name}</p>
     </div>
   );
 }
 
-function Activity({
+function InfoRow({
   icon,
   color,
+  title,
   text,
-  time,
 }: {
   icon: React.ReactNode;
   color: string;
+  title: string;
   text: string;
-  time: string;
 }) {
   return (
-    <div className="activityRow">
-      <div className="smallIcon" style={{ background: color }}>{icon}</div>
-      <p className="activityText">{text}</p>
-      <span className="activityTime">{time}</span>
+    <div className="infoRow">
+      <div className="smallIcon" style={{ background: color }}>
+        {icon}
+      </div>
+
+      <div>
+        <p className="infoTitle">{title}</p>
+        <p className="infoText">{text}</p>
+      </div>
     </div>
   );
 }

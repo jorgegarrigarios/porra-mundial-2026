@@ -7,11 +7,11 @@ import {
   Copy,
   Crown,
   Medal,
-  Trophy,
   Users,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { obtenerParticipanteActual } from "@/lib/participante";
 
 type Props = {
   params: { id: string };
@@ -26,7 +26,6 @@ type Liga = {
 type MiembroRanking = {
   id: number;
   nombre: string;
-  nickname: string | null;
   puntos: number;
   aciertos: number;
 };
@@ -36,74 +35,108 @@ export default function LigaDetallePage({ params }: Props) {
   const [liga, setLiga] = useState<Liga | null>(null);
   const [ranking, setRanking] = useState<MiembroRanking[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [sinAcceso, setSinAcceso] = useState(false);
 
   useEffect(() => {
-    async function preparar() {
-      const id = Number(params.id);
+    const id = Number(params.id);
 
-      setLigaId(id);
-      cargarLiga(id);
-    }
-
-    preparar();
+    setLigaId(id);
+    cargarLiga(id);
   }, [params]);
 
   async function cargarLiga(id: number) {
-    const { data: ligaData } = await supabase
-      .from("ligas")
-      .select("*")
-      .eq("id", id)
-      .single();
+    setCargando(true);
+    setSinAcceso(false);
 
-    setLiga(ligaData);
+    try {
+      const usuario = await obtenerParticipanteActual();
 
-    const { data: miembrosData } = await supabase
-      .from("liga_participantes")
-      .select(
+      if (!usuario) {
+        setSinAcceso(true);
+        setCargando(false);
+        return;
+      }
+
+      const { data: perteneceLiga } = await supabase
+        .from("liga_participantes")
+        .select("id")
+        .eq("liga_id", id)
+        .eq("participante_id", usuario.id)
+        .maybeSingle();
+
+      if (!perteneceLiga) {
+        setSinAcceso(true);
+        setCargando(false);
+        return;
+      }
+
+      const { data: ligaData } = await supabase
+        .from("ligas")
+        .select("id, nombre, codigo")
+        .eq("id", id)
+        .single();
+
+      setLiga(ligaData);
+
+      const { data: miembrosData } = await supabase
+        .from("liga_participantes")
+        .select(
+          `
+          participante_id,
+          participantes (
+            id,
+            nombre,
+            nickname
+          )
         `
-        participante_id,
-        participantes (
-          id,
-          nombre,
-          nickname
         )
-      `
-      )
-      .eq("liga_id", id);
+        .eq("liga_id", id);
 
-    const miembros =
-      miembrosData?.map((item: any) => item.participantes).filter(Boolean) ??
-      [];
+      const miembros =
+        miembrosData?.map((item: any) => item.participantes).filter(Boolean) ??
+        [];
 
-    const { data: pronosticosData } = await supabase
-      .from("pronosticos")
-      .select("participante_id, puntos");
+      const { data: pronosticosData } = await supabase
+        .from("pronosticos")
+        .select("participante_id, puntos");
 
-    const rankingCalculado: MiembroRanking[] = miembros.map((miembro: any) => {
-      const pronosticosMiembro =
-        pronosticosData?.filter((p) => p.participante_id === miembro.id) ?? [];
+      const rankingCalculado: MiembroRanking[] = miembros.map(
+        (miembro: any) => {
+          const nombreVisible =
+            miembro.nickname || miembro.nombre || "Usuario";
 
-      const puntos = pronosticosMiembro.reduce(
-        (total, p) => total + (p.puntos ?? 0),
-        0
+          const pronosticosMiembro =
+            pronosticosData?.filter(
+              (p) => p.participante_id === miembro.id
+            ) ?? [];
+
+          const puntos = pronosticosMiembro.reduce(
+            (total, p) => total + (p.puntos ?? 0),
+            0
+          );
+
+          const aciertos = pronosticosMiembro.filter(
+            (p) => (p.puntos ?? 0) > 0
+          ).length;
+
+          return {
+            id: miembro.id,
+            nombre: nombreVisible,
+            puntos,
+            aciertos,
+          };
+        }
       );
 
-      const aciertos = pronosticosMiembro.filter((p) => (p.puntos ?? 0) > 0)
-        .length;
+      rankingCalculado.sort((a, b) => b.puntos - a.puntos);
 
-      return {
-        id: miembro.id,
-        nombre: miembro.nombre,
-        nickname: miembro.nickname,
-        puntos,
-        aciertos,
-      };
-    });
-
-    rankingCalculado.sort((a, b) => b.puntos - a.puntos);
-
-    setRanking(rankingCalculado);
-    setCargando(false);
+      setRanking(rankingCalculado);
+    } catch (error) {
+      console.error("Error cargando liga:", error);
+      setLiga(null);
+    } finally {
+      setCargando(false);
+    }
   }
 
   useEffect(() => {
@@ -149,6 +182,25 @@ export default function LigaDetallePage({ params }: Props) {
       <main className="page">
         <div className="container">
           <div className="emptyBox">Cargando liga...</div>
+        </div>
+
+        <Styles />
+      </main>
+    );
+  }
+
+  if (sinAcceso) {
+    return (
+      <main className="page">
+        <div className="container">
+          <Link href="/ligas" className="backLink">
+            <ArrowLeft size={18} />
+            Volver a ligas
+          </Link>
+
+          <div className="emptyBox">
+            No tienes acceso a esta liga.
+          </div>
         </div>
 
         <Styles />
@@ -208,7 +260,7 @@ export default function LigaDetallePage({ params }: Props) {
 
           <div className="statCard">
             <p>Líder</p>
-            <strong>{ranking[0]?.nickname ?? ranking[0]?.nombre ?? "-"}</strong>
+            <strong>{ranking[0]?.nombre ?? "-"}</strong>
           </div>
 
           <div className="statCard">
@@ -243,8 +295,7 @@ export default function LigaDetallePage({ params }: Props) {
               </div>
 
               <div className="memberInfo">
-                <h3>{miembro.nickname || miembro.nombre}</h3>
-                <p>{miembro.nombre}</p>
+                <h3>{miembro.nombre}</h3>
               </div>
 
               <div className="memberStats">
@@ -298,9 +349,7 @@ function PodiumCard({
 
       <p className="podiumPosition">#{position}</p>
 
-      <h3>{miembro.nickname || miembro.nombre}</h3>
-
-      <p className="realName">{miembro.nombre}</p>
+      <h3>{miembro.nombre}</h3>
 
       <strong>{miembro.puntos}</strong>
 
@@ -458,11 +507,6 @@ function Styles() {
         margin-top: 8px;
       }
 
-      .realName {
-        color: #94a3b8;
-        margin-top: 4px;
-      }
-
       .podiumCard strong {
         display: block;
         font-size: 42px;
@@ -520,11 +564,6 @@ function Styles() {
       .memberInfo h3 {
         font-size: 22px;
         font-weight: 900;
-      }
-
-      .memberInfo p {
-        color: #94a3b8;
-        margin-top: 4px;
       }
 
       .memberStats {

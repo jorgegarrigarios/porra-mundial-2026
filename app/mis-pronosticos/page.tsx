@@ -47,9 +47,10 @@ type Pronostico = {
 
 type Participante = {
   id: number;
-  nombre: string;
+  nombre: string | null;
   apellidos?: string | null;
   nickname?: string | null;
+  email?: string | null;
   role?: string | null;
 };
 

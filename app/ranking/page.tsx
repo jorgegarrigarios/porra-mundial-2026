@@ -14,7 +14,8 @@ import { obtenerParticipanteActual } from "@/lib/participante";
 
 type Participante = {
   id: number;
-  nombre: string;
+  nombre: string | null;
+  nickname: string | null;
 };
 
 type Pronostico = {
@@ -42,81 +43,88 @@ export default function RankingPage() {
   async function cargarRanking() {
     setLoading(true);
 
-    const usuario = await obtenerParticipanteActual();
+    try {
+      const usuario = await obtenerParticipanteActual();
 
-    if (usuario) {
-      setUsuarioActual(usuario.nombre);
-    }
+      if (usuario) {
+        setUsuarioActual(usuario.nickname || usuario.nombre || "Usuario");
+      }
 
-    const { data: participantes, error: participantesError } = await supabase
-      .from("participantes")
-      .select("*");
+      const { data: participantes, error: participantesError } = await supabase
+        .from("participantes")
+        .select("id, nombre, nickname");
 
-    if (participantesError) {
-      console.error(
-        "Error cargando participantes:",
-        participantesError.message
-      );
-      setLoading(false);
-      return;
-    }
-
-    const { data: pronosticos, error: pronosticosError } = await supabase
-      .from("pronosticos")
-      .select("*");
-
-    if (pronosticosError) {
-      console.error(
-        "Error cargando pronósticos:",
-        pronosticosError.message
-      );
-      setLoading(false);
-      return;
-    }
-
-    const rankingGenerado = (participantes ?? []).map(
-      (participante: Participante) => {
-        const pronosticosJugador = (pronosticos ?? []).filter(
-          (p: Pronostico) =>
-            p.participante_id === participante.id
+      if (participantesError) {
+        console.error(
+          "Error cargando participantes:",
+          participantesError.message
         );
+        setRanking([]);
+        return;
+      }
 
-        const puntos = pronosticosJugador.reduce(
-          (acc: number, p: Pronostico) =>
-            acc + (p.puntos ?? 0),
-          0
+      const { data: pronosticos, error: pronosticosError } = await supabase
+        .from("pronosticos")
+        .select("participante_id, puntos");
+
+      if (pronosticosError) {
+        console.error(
+          "Error cargando pronósticos:",
+          pronosticosError.message
         );
-
-        return {
-          id: participante.id,
-          nombre: participante.nombre,
-          puntos,
-
-          exactos: pronosticosJugador.filter(
-            (p: Pronostico) => (p.puntos ?? 0) === 5
-          ).length,
-
-          acertados: pronosticosJugador.filter(
-            (p: Pronostico) => (p.puntos ?? 0) >= 3
-          ).length,
-        };
-      }
-    );
-
-    rankingGenerado.sort((a, b) => {
-      if (b.puntos !== a.puntos) {
-        return b.puntos - a.puntos;
+        setRanking([]);
+        return;
       }
 
-      if (b.exactos !== a.exactos) {
-        return b.exactos - a.exactos;
-      }
+      const rankingGenerado = (participantes ?? []).map(
+        (participante: Participante) => {
+          const nombreVisible =
+            participante.nickname || participante.nombre || "Usuario";
 
-      return b.acertados - a.acertados;
-    });
+          const pronosticosJugador = (pronosticos ?? []).filter(
+            (p: Pronostico) => p.participante_id === participante.id
+          );
 
-    setRanking(rankingGenerado);
-    setLoading(false);
+          const puntos = pronosticosJugador.reduce(
+            (acc: number, p: Pronostico) => acc + (p.puntos ?? 0),
+            0
+          );
+
+          return {
+            id: participante.id,
+            nombre: nombreVisible,
+            puntos,
+
+            exactos: pronosticosJugador.filter(
+              (p: Pronostico) => (p.puntos ?? 0) === 5
+            ).length,
+
+            acertados: pronosticosJugador.filter(
+              (p: Pronostico) => (p.puntos ?? 0) >= 3
+            ).length,
+          };
+        }
+      );
+
+      rankingGenerado.sort((a, b) => {
+        if (b.puntos !== a.puntos) {
+          return b.puntos - a.puntos;
+        }
+
+        if (b.exactos !== a.exactos) {
+          return b.exactos - a.exactos;
+        }
+
+        return b.acertados - a.acertados;
+      });
+
+      setRanking(rankingGenerado);
+    } catch (error) {
+      console.error("Error inesperado cargando ranking:", error);
+      setRanking([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (loading) {
@@ -134,7 +142,6 @@ export default function RankingPage() {
   }
 
   const top3 = ranking.slice(0, 3);
-  const resto = ranking.slice(3);
 
   return (
     <main className="page">
@@ -212,9 +219,7 @@ export default function RankingPage() {
             <div
               key={jugador.id}
               className={`row ${
-                jugador.nombre === usuarioActual
-                  ? "myRow"
-                  : ""
+                jugador.nombre === usuarioActual ? "myRow" : ""
               }`}
             >
               <div className="left">
@@ -226,8 +231,7 @@ export default function RankingPage() {
                   <div className="nameRow">
                     <strong>{jugador.nombre}</strong>
 
-                    {jugador.nombre ===
-                      usuarioActual && (
+                    {jugador.nombre === usuarioActual && (
                       <span className="youBadgeSmall">
                         Tú
                       </span>
