@@ -314,7 +314,7 @@ export default function MisPronosticosPage() {
     if (!participante) return;
 
     if (partidoBloqueado(partido)) {
-      alert("Este partido ya ha comenzado.");
+      alert("Este partido ya ha comenzado. El pronóstico está cerrado.");
       return;
     }
 
@@ -428,7 +428,7 @@ export default function MisPronosticosPage() {
 
           <div>
             <h1>Mis pronósticos</h1>
-            <p>Guarda tus predicciones antes de que empiece cada partido</p>
+            <p>Guarda o modifica tus predicciones antes de que empiece cada partido</p>
           </div>
         </div>
 
@@ -442,7 +442,7 @@ export default function MisPronosticosPage() {
         <div className="summaryBox">
           <div>
             <p className="summaryLabel">Participante</p>
-            <strong>{participante.nickname || participante.nombre}</strong>
+            <strong>{participante.nickname || participante.nombre || "Usuario"}</strong>
           </div>
 
           <div>
@@ -619,6 +619,13 @@ export default function MisPronosticosPage() {
                       />
                     </div>
                   </div>
+
+                  {bloqueado && (
+                    <div className="lockedHint">
+                      <Lock size={15} />
+                      Este partido ya empezó. El pronóstico no se puede modificar.
+                    </div>
+                  )}
                 </div>
 
                 <div className="bottomRow">
@@ -830,6 +837,7 @@ function Styles() {
         padding: 10px 14px;
         font-weight: 900;
         cursor: pointer;
+        white-space: nowrap;
       }
 
       .filterButtons button:hover,
@@ -1092,6 +1100,16 @@ function Styles() {
         color: #94a3b8;
       }
 
+      .lockedHint {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        color: #fca5a5;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
       .bottomRow {
         margin-top: 16px;
         display: flex;
@@ -1189,7 +1207,67 @@ function Styles() {
         }
 
         .summaryBox {
-          grid-template-columns: 1fr;
+          display: flex;
+          overflow-x: auto;
+          gap: 10px;
+          padding-bottom: 4px;
+          scrollbar-width: none;
+        }
+
+        .summaryBox::-webkit-scrollbar {
+          display: none;
+        }
+
+        .summaryBox > div {
+          min-width: 132px;
+          padding: 12px;
+          border-radius: 16px;
+        }
+
+        .summaryLabel {
+          font-size: 10px;
+          margin-bottom: 4px;
+        }
+
+        .summaryBox strong {
+          font-size: 18px;
+        }
+
+        .filtersWrapper {
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .searchBox {
+          border-radius: 16px;
+        }
+
+        .searchBox input {
+          height: 42px;
+          font-size: 14px;
+        }
+
+        .filterButtons {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          gap: 8px;
+          padding-bottom: 4px;
+          scrollbar-width: none;
+        }
+
+        .filterButtons::-webkit-scrollbar {
+          display: none;
+        }
+
+        .filterButtons button {
+          flex: 0 0 auto;
+          padding: 9px 12px;
+          font-size: 13px;
+        }
+
+        .resultsInfo {
+          font-size: 12px;
+          margin-bottom: 10px;
         }
 
         .matchHeader {
@@ -1215,17 +1293,31 @@ function Styles() {
 
       @media (max-width: 520px) {
         .misPronosticosPage {
-          padding: 24px 12px 120px;
+          padding: 20px 12px 120px;
         }
 
         .header {
           align-items: flex-start;
+          margin-bottom: 16px;
         }
 
         .headerIcon {
-          width: 60px;
-          height: 60px;
-          border-radius: 20px;
+          width: 54px;
+          height: 54px;
+          border-radius: 18px;
+        }
+
+        .header h1 {
+          font-size: 30px;
+        }
+
+        .header p {
+          font-size: 14px;
+        }
+
+        .card {
+          padding: 16px;
+          border-radius: 22px;
         }
 
         .scoreRow {
@@ -1237,9 +1329,12 @@ function Styles() {
           text-align: center;
         }
 
-        .filterButtons button {
-          width: 100%;
-          justify-content: center;
+        .topRow {
+          align-items: flex-start;
+        }
+
+        .status {
+          flex-shrink: 0;
         }
       }
     `}</style>

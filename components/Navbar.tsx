@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -8,7 +8,6 @@ import {
   Home,
   CalendarDays,
   Target,
-  Trophy,
   Table2,
   LogIn,
   LogOut,
@@ -19,13 +18,42 @@ import {
 import { supabase } from "@/lib/supabase";
 
 const links = [
-  { href: "/", label: "Inicio", icon: Home },
-  { href: "/partidos", label: "Partidos", icon: CalendarDays },
-  { href: "/mis-pronosticos", label: "Pronósticos", icon: Target },
-  { href: "/clasificacion", label: "Clasificación", icon: Table2 },
-  { href: "/ranking", label: "Ranking", icon: Trophy },
-  { href: "/ligas", label: "Ligas", icon: Users },
-  { href: "/reglas", label: "Reglas", icon: Shield },
+  {
+    href: "/",
+    label: "Inicio",
+    icon: Home,
+    public: true,
+  },
+  {
+    href: "/partidos",
+    label: "Partidos",
+    icon: CalendarDays,
+    public: true,
+  },
+  {
+    href: "/mis-pronosticos",
+    label: "Pronósticos",
+    icon: Target,
+    public: false,
+  },
+  {
+    href: "/clasificacion",
+    label: "Clasificación",
+    icon: Table2,
+    public: true,
+  },
+  {
+    href: "/ligas",
+    label: "Ligas",
+    icon: Users,
+    public: true,
+  },
+  {
+    href: "/reglas",
+    label: "Reglas",
+    icon: Shield,
+    public: false,
+  },
 ];
 
 type ParticipanteNavbar = {
@@ -52,6 +80,12 @@ export default function Navbar() {
 
   const [nombreVisible, setNombreVisible] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  const estaLogado = !!nombreVisible;
+
+  const visibleLinks = useMemo(() => {
+    return links.filter((link) => link.public || estaLogado);
+  }, [estaLogado]);
 
   useEffect(() => {
     let mounted = true;
@@ -143,7 +177,7 @@ export default function Navbar() {
           </Link>
 
           <div className="navLinks">
-            {links.map((link) => {
+            {visibleLinks.map((link) => {
               const active = isActive(link.href);
 
               return (
@@ -192,8 +226,13 @@ export default function Navbar() {
         </div>
       </nav>
 
-      <nav className="mobileNav">
-        {links.map((link) => {
+      <nav
+        className="mobileNav"
+        style={{
+          gridTemplateColumns: `repeat(${visibleLinks.length}, 1fr)`,
+        }}
+      >
+        {visibleLinks.map((link) => {
           const Icon = link.icon;
           const active = isActive(link.href);
 
@@ -420,7 +459,6 @@ export default function Navbar() {
             bottom: 12px;
             z-index: 100;
             display: grid;
-            grid-template-columns: repeat(7, 1fr);
             gap: 6px;
             padding: 10px;
             border-radius: 24px;
@@ -483,15 +521,14 @@ export default function Navbar() {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            color: #dbeafe;
-            background: rgba(37,99,235,0.22);
-            border-color: rgba(96,165,250,0.34);
           }
 
           .activeMobileTopButton {
             background: #dc2626;
-            border-color: rgba(220,38,38,0.55);
-            box-shadow: 0 0 22px rgba(220,38,38,0.45);
+          }
+
+          body {
+            padding-bottom: 95px;
           }
         }
       `}</style>

@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  CalendarDays,
   Copy,
   Crown,
   Medal,
+  ScrollText,
+  Table2,
+  Target,
   Users,
 } from "lucide-react";
 
@@ -14,7 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { obtenerParticipanteActual } from "@/lib/participante";
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 type Liga = {
@@ -31,6 +35,8 @@ type MiembroRanking = {
 };
 
 export default function LigaDetallePage({ params }: Props) {
+  const resolvedParams = use(params);
+
   const [ligaId, setLigaId] = useState<number | null>(null);
   const [liga, setLiga] = useState<Liga | null>(null);
   const [ranking, setRanking] = useState<MiembroRanking[]>([]);
@@ -38,11 +44,11 @@ export default function LigaDetallePage({ params }: Props) {
   const [sinAcceso, setSinAcceso] = useState(false);
 
   useEffect(() => {
-    const id = Number(params.id);
+    const id = Number(resolvedParams.id);
 
     setLigaId(id);
     cargarLiga(id);
-  }, [params]);
+  }, [resolvedParams.id]);
 
   async function cargarLiga(id: number) {
     setCargando(true);
@@ -198,9 +204,7 @@ export default function LigaDetallePage({ params }: Props) {
             Volver a ligas
           </Link>
 
-          <div className="emptyBox">
-            No tienes acceso a esta liga.
-          </div>
+          <div className="emptyBox">No tienes acceso a esta liga.</div>
         </div>
 
         <Styles />
@@ -232,7 +236,7 @@ export default function LigaDetallePage({ params }: Props) {
       <div className="container">
         <Link href="/ligas" className="backLink">
           <ArrowLeft size={18} />
-          Volver a ligas
+          Cambiar de liga
         </Link>
 
         <section className="hero">
@@ -241,7 +245,7 @@ export default function LigaDetallePage({ params }: Props) {
           </div>
 
           <div className="heroText">
-            <p className="eyebrow">Liga privada</p>
+            <p className="eyebrow">Estás dentro de la liga</p>
             <h1>{liga.nombre}</h1>
             <p>Ranking privado entre los miembros de esta liga.</p>
           </div>
@@ -250,6 +254,40 @@ export default function LigaDetallePage({ params }: Props) {
             <Copy size={18} />
             {liga.codigo}
           </button>
+        </section>
+
+        <section className="contextActions">
+          <Link href="/mis-pronosticos" className="contextAction primary">
+            <Target size={22} />
+            <div>
+              <strong>Pronósticos</strong>
+              <span>Haz o revisa tus apuestas</span>
+            </div>
+          </Link>
+
+          <Link href="/partidos" className="contextAction">
+            <CalendarDays size={22} />
+            <div>
+              <strong>Partidos</strong>
+              <span>Calendario del Mundial</span>
+            </div>
+          </Link>
+
+          <Link href="/clasificacion" className="contextAction">
+            <Table2 size={22} />
+            <div>
+              <strong>Clasificación</strong>
+              <span>Grupos y fases</span>
+            </div>
+          </Link>
+
+          <Link href="/reglas" className="contextAction">
+            <ScrollText size={22} />
+            <div>
+              <strong>Reglas</strong>
+              <span>Sistema de puntos</span>
+            </div>
+          </Link>
         </section>
 
         <section className="statsGrid">
@@ -412,6 +450,7 @@ function Styles() {
         text-transform: uppercase;
         font-weight: 900;
         letter-spacing: 1px;
+        margin: 0;
       }
 
       .hero h1 {
@@ -422,6 +461,7 @@ function Styles() {
 
       .hero p {
         color: #94a3b8;
+        margin: 0;
       }
 
       .codeButton {
@@ -436,6 +476,53 @@ function Styles() {
         color: white;
         font-weight: 900;
         cursor: pointer;
+        font-family: inherit;
+        font-size: 15px;
+      }
+
+      .contextActions {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .contextAction {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        text-decoration: none;
+        color: white;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 22px;
+        padding: 18px;
+        transition: 0.2s ease;
+      }
+
+      .contextAction:hover {
+        transform: translateY(-2px);
+        background: rgba(255,255,255,0.09);
+        border-color: rgba(147,197,253,0.35);
+      }
+
+      .contextAction.primary {
+        background: rgba(37,99,235,0.20);
+        border-color: rgba(96,165,250,0.40);
+      }
+
+      .contextAction strong {
+        display: block;
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .contextAction span {
+        display: block;
+        margin-top: 3px;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 800;
       }
 
       .statsGrid {
@@ -458,6 +545,7 @@ function Styles() {
         text-transform: uppercase;
         font-size: 12px;
         letter-spacing: 1px;
+        margin: 0;
       }
 
       .statCard strong {
@@ -499,12 +587,13 @@ function Styles() {
       .podiumPosition {
         color: #cbd5e1;
         font-weight: 900;
+        margin: 0;
       }
 
       .podiumCard h3 {
         font-size: 26px;
         font-weight: 900;
-        margin-top: 8px;
+        margin: 8px 0 0;
       }
 
       .podiumCard strong {
@@ -564,6 +653,7 @@ function Styles() {
       .memberInfo h3 {
         font-size: 22px;
         font-weight: 900;
+        margin: 0;
       }
 
       .memberStats {
@@ -601,6 +691,12 @@ function Styles() {
         text-align: center;
       }
 
+      @media (max-width: 900px) {
+        .contextActions {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
       @media (max-width: 800px) {
         .hero {
           grid-template-columns: 1fr;
@@ -623,6 +719,44 @@ function Styles() {
 
         .hero h1 {
           font-size: 34px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .page {
+          padding: 24px 12px 120px;
+        }
+
+        .hero {
+          padding: 22px;
+          border-radius: 26px;
+        }
+
+        .heroIcon {
+          width: 64px;
+          height: 64px;
+          border-radius: 20px;
+        }
+
+        .hero h1 {
+          font-size: 30px;
+        }
+
+        .codeButton {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .contextActions {
+          grid-template-columns: 1fr;
+        }
+
+        .contextAction {
+          padding: 16px;
+        }
+
+        .sectionTitle {
+          font-size: 28px;
         }
       }
     `}</style>
