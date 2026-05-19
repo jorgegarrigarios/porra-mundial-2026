@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   User,
   UserRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -22,8 +24,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [aceptaPrivacidad, setAceptaPrivacidad] = useState(false);
-  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [mostrarPassword, setMostrarPassword] =
+    useState(false);
+
+  const [aceptaPrivacidad, setAceptaPrivacidad] =
+    useState(false);
+
+  const [aceptaTerminos, setAceptaTerminos] =
+    useState(false);
 
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +48,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -51,36 +59,21 @@ export default function LoginPage() {
       return;
     }
 
-    const authUser = data.user;
+    alert(
+      "Cuenta creada correctamente. Revisa tu email para confirmar la cuenta."
+    );
 
-    if (!authUser) {
-      alert("Error creando usuario");
-      setLoading(false);
-      return;
-    }
-
-    await supabase.from("participantes").insert({
-      nombre,
-      apellidos,
-      nickname,
-      auth_user_id: authUser.id,
-      acepta_privacidad: aceptaPrivacidad,
-      acepta_terminos: aceptaTerminos,
-      role: "user",
-    });
-
-    alert("Cuenta creada correctamente");
-
-    window.location.href = "/";
+    setLoading(false);
   }
 
   async function iniciarSesion() {
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
     if (error) {
       alert(error.message);
@@ -89,6 +82,33 @@ export default function LoginPage() {
     }
 
     window.location.href = "/";
+  }
+
+  async function recuperarPassword() {
+    if (!email) {
+      alert("Introduce tu email primero");
+      return;
+    }
+
+    const { error } =
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        {
+          redirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/login`
+              : undefined,
+        }
+      );
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert(
+      "Te hemos enviado un email para recuperar tu contraseña"
+    );
   }
 
   return (
@@ -99,7 +119,9 @@ export default function LoginPage() {
         </div>
 
         <h1>
-          {modoRegistro ? "Crear cuenta" : "Accede a tu porra"}
+          {modoRegistro
+            ? "Crear cuenta"
+            : "Accede a tu porra"}
         </h1>
 
         <p className="subtitle">
@@ -119,7 +141,9 @@ export default function LoginPage() {
                 type="text"
                 placeholder="Jorge"
                 value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
+                onChange={(e) =>
+                  setNombre(e.target.value)
+                }
               />
             </div>
 
@@ -132,7 +156,9 @@ export default function LoginPage() {
                 type="text"
                 placeholder="Garriga"
                 value={apellidos}
-                onChange={(e) => setApellidos(e.target.value)}
+                onChange={(e) =>
+                  setApellidos(e.target.value)
+                }
               />
             </div>
 
@@ -143,9 +169,11 @@ export default function LoginPage() {
 
               <input
                 type="text"
-                placeholder="JorgeG"
+                placeholder="Garrigt"
                 value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
+                onChange={(e) =>
+                  setNickname(e.target.value)
+                }
               />
             </div>
           </>
@@ -166,20 +194,36 @@ export default function LoginPage() {
 
         <label>Contraseña</label>
 
-        <div className="inputBox">
+        <div className="inputBox passwordBox">
           <Lock size={20} />
 
           <input
-            type="password"
-            placeholder="Mínimo 6 caracteres"
+            type={mostrarPassword ? "text" : "password"}
+            placeholder="********"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
           />
+
+          <button
+            type="button"
+            className="togglePassword"
+            onClick={() =>
+              setMostrarPassword(!mostrarPassword)
+            }
+          >
+            {mostrarPassword ? (
+              <EyeOff size={20} />
+            ) : (
+              <Eye size={20} />
+            )}
+          </button>
         </div>
 
         {modoRegistro && (
           <>
-            <label className="checkboxRow">
+            <label className="checkboxLabel">
               <input
                 type="checkbox"
                 checked={aceptaPrivacidad}
@@ -189,14 +233,14 @@ export default function LoginPage() {
               />
 
               <span>
-                He leído y acepto la{" "}
-                <Link href="/privacidad" className="legalLink">
-                  Política de Privacidad
+                Acepto la{" "}
+                <Link href="/privacidad">
+                  política de privacidad
                 </Link>
               </span>
             </label>
 
-            <label className="checkboxRow">
+            <label className="checkboxLabel">
               <input
                 type="checkbox"
                 checked={aceptaTerminos}
@@ -207,27 +251,21 @@ export default function LoginPage() {
 
               <span>
                 Acepto los{" "}
-                <Link href="/terminos" className="legalLink">
-                  Términos y Condiciones
+                <Link href="/terminos">
+                  términos y condiciones
                 </Link>
               </span>
             </label>
-
-            <p className="legalNotice">
-              Al crear una cuenta también aceptas el{" "}
-              <Link href="/aviso-legal" className="legalLink">
-                Aviso Legal
-              </Link>
-              .
-            </p>
           </>
         )}
 
         <button
+          className="submitButton"
           onClick={
-            modoRegistro ? crearCuenta : iniciarSesion
+            modoRegistro
+              ? crearCuenta
+              : iniciarSesion
           }
-          className="primaryButton"
           disabled={loading}
         >
           {loading
@@ -237,215 +275,199 @@ export default function LoginPage() {
             : "Iniciar sesión"}
         </button>
 
+        {!modoRegistro && (
+          <button
+            type="button"
+            className="forgotPassword"
+            onClick={recuperarPassword}
+          >
+            ¿Has olvidado tu contraseña?
+          </button>
+        )}
+
         <button
-          onClick={() => setModoRegistro(!modoRegistro)}
-          className="secondaryButton"
+          className="switchMode"
+          onClick={() =>
+            setModoRegistro(!modoRegistro)
+          }
         >
           {modoRegistro
             ? "Ya tengo cuenta"
-            : "Crear cuenta"}
+            : "Crear una cuenta"}
         </button>
       </section>
 
-      <style>{`
+      <style jsx>{`
         .loginPage {
           min-height: 100vh;
-
-          background:
-            radial-gradient(circle at top, rgba(37,99,235,0.22), transparent 32%),
-            linear-gradient(180deg, #020617 0%, #111827 100%);
-
-          color: white;
-
-          padding: 40px 16px 110px;
-
           display: flex;
           align-items: center;
           justify-content: center;
+          padding: 40px 20px;
+          background:
+            radial-gradient(
+              circle at top,
+              rgba(37, 99, 235, 0.2),
+              transparent 40%
+            ),
+            #020617;
         }
 
         .loginCard {
           width: 100%;
-          max-width: 460px;
-
-          background:
-            linear-gradient(
-              145deg,
-              rgba(15,23,42,0.98),
-              rgba(15,23,42,0.65)
-            );
-
-          border: 1px solid rgba(255,255,255,0.12);
-
+          max-width: 520px;
+          background: rgba(15, 23, 42, 0.92);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 32px;
-
-          padding: 32px;
-
-          box-shadow: 0 30px 90px rgba(0,0,0,0.38);
+          padding: 40px;
+          backdrop-filter: blur(18px);
+          box-shadow: 0 0 60px rgba(0, 0, 0, 0.45);
         }
 
         .iconBox {
-          width: 70px;
-          height: 70px;
-
-          border-radius: 24px;
-
-          background: #2563eb;
-
+          width: 72px;
+          height: 72px;
+          border-radius: 22px;
+          background: linear-gradient(
+            135deg,
+            #2563eb,
+            #1d4ed8
+          );
           display: flex;
           align-items: center;
           justify-content: center;
-
-          margin-bottom: 22px;
+          color: white;
+          margin-bottom: 24px;
         }
 
         h1 {
-          font-size: 34px;
+          font-size: 42px;
+          color: white;
+          margin-bottom: 12px;
           font-weight: 900;
-          margin: 0;
         }
 
         .subtitle {
           color: #94a3b8;
-          line-height: 1.6;
-
-          margin-top: 10px;
-          margin-bottom: 26px;
+          line-height: 1.7;
+          margin-bottom: 34px;
+          font-size: 16px;
         }
 
         label {
           display: block;
-
           color: #cbd5e1;
-
-          font-size: 13px;
-          font-weight: 900;
-
-          text-transform: uppercase;
-
-          letter-spacing: 1px;
-
-          margin-bottom: 8px;
-          margin-top: 16px;
+          font-weight: 700;
+          margin-bottom: 10px;
+          margin-top: 18px;
         }
 
         .inputBox {
           display: flex;
           align-items: center;
-          gap: 10px;
-
-          background: rgba(0,0,0,0.28);
-
-          border: 1px solid rgba(255,255,255,0.12);
-
-          border-radius: 16px;
-
-          padding: 14px;
+          gap: 12px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 18px;
+          padding: 0 18px;
+          height: 62px;
+          color: #94a3b8;
         }
 
         .inputBox input {
-          width: 100%;
-
+          flex: 1;
           background: transparent;
-
           border: none;
           outline: none;
-
           color: white;
-
           font-size: 16px;
         }
 
-        .inputBox input::placeholder {
-          color: #64748b;
+        .passwordBox {
+          padding-right: 10px;
         }
 
-        .checkboxRow {
+        .togglePassword {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .checkboxLabel {
           display: flex;
           align-items: flex-start;
-          gap: 10px;
-
+          gap: 12px;
           margin-top: 18px;
-
-          font-size: 13px;
-
           color: #cbd5e1;
-
-          text-transform: none;
-          letter-spacing: 0;
-
-          cursor: pointer;
-        }
-
-        .checkboxRow input {
-          width: 18px;
-          height: 18px;
-          margin-top: 2px;
-        }
-
-        .legalLink {
-          color: #60a5fa;
-          text-decoration: none;
-          font-weight: 800;
-        }
-
-        .legalLink:hover {
-          text-decoration: underline;
-        }
-
-        .legalNotice {
-          margin-top: 18px;
-
-          color: #94a3b8;
-
-          font-size: 13px;
-
+          font-size: 14px;
           line-height: 1.6;
         }
 
-        .primaryButton,
-        .secondaryButton {
+        .checkboxLabel input {
+          margin-top: 3px;
+        }
+
+        .checkboxLabel a {
+          color: #60a5fa;
+          text-decoration: none;
+        }
+
+        .submitButton {
           width: 100%;
-
+          margin-top: 30px;
+          height: 62px;
           border: none;
-
-          border-radius: 16px;
-
-          padding: 15px;
-
+          border-radius: 18px;
+          background: linear-gradient(
+            135deg,
+            #2563eb,
+            #1d4ed8
+          );
+          color: white;
+          font-size: 18px;
           font-weight: 900;
-          font-size: 16px;
-
           cursor: pointer;
+          transition: 0.2s ease;
+        }
 
+        .submitButton:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 30px rgba(37, 99, 235, 0.35);
+        }
+
+        .forgotPassword {
           margin-top: 18px;
+          background: transparent;
+          border: none;
+          color: #60a5fa;
+          cursor: pointer;
+          font-size: 15px;
+          font-weight: 700;
+          width: 100%;
         }
 
-        .primaryButton {
-          background: #2563eb;
-          color: white;
+        .switchMode {
+          margin-top: 26px;
+          background: transparent;
+          border: none;
+          color: #cbd5e1;
+          cursor: pointer;
+          font-size: 15px;
+          width: 100%;
         }
 
-        .secondaryButton {
-          background: rgba(255,255,255,0.08);
-
-          color: white;
-
-          border: 1px solid rgba(255,255,255,0.12);
-        }
-
-        @media (max-width: 520px) {
+        @media (max-width: 640px) {
           .loginCard {
-            padding: 24px;
+            padding: 30px 22px;
             border-radius: 26px;
           }
 
           h1 {
-            font-size: 28px;
-          }
-
-          .subtitle {
-            font-size: 14px;
+            font-size: 34px;
           }
         }
       `}</style>
