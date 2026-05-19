@@ -15,7 +15,9 @@ import { obtenerParticipanteActual } from "@/lib/participante";
 
 type Participante = {
   id: number;
-  nombre: string;
+  nombre: string | null;
+  apellidos?: string | null;
+  nickname?: string | null;
   role?: string | null;
 };
 
