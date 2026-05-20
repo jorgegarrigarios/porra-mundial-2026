@@ -1,570 +1,523 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import {
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  Loader2,
-  Lock,
-  Mail,
-  ShieldCheck,
-  User,
-  UserRound,
-} from "lucide-react";
-
+import { useEffect, useState } from "react";
+import { Eye, EyeOff, Lock, Mail, User, Trophy, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { obtenerParticipanteActual } from "@/lib/participante";
 
-function timeoutPromise(ms: number, mensaje: string): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(mensaje)), ms);
-  });
+type Modo = "login" | "registro" | "recuperar";
+
+function esperar(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms = 12000,
-  mensaje = "La operación está tardando demasiado. Revisa tu conexión e inténtalo de nuevo."
-): Promise<T> {
-  return Promise.race([promise, timeoutPromise(ms, mensaje)]);
+async function esperarSesionReal(intentos = 20, pausaMs = 250) {
+  for (let i = 0; i < intentos; i++) {
+    const { data, error } = await supabase.auth.getSession();
+
+    if (!error && data.session?.user) {
+      return data.session;
+    }
+
+    await esperar(pausaMs);
+  }
+
+  return null;
 }
 
 export default function LoginPage() {
-  const [modoRegistro, setModoRegistro] = useState(false);
+  const [modo, setModo] = useState<Modo>("login");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [nombre, setNombre] = useState("");
   const [apellidos, setApellidos] = useState("");
   const [nickname, setNickname] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
+  const [aceptaLegal, setAceptaLegal] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
-  const [aceptaPrivacidad, setAceptaPrivacidad] = useState(false);
-  const [aceptaTerminos, setAceptaTerminos] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [mensajeError, setMensajeError] = useState<string | null>(null);
+  const [comprobandoSesion, setComprobandoSesion] = useState(true);
+  const [mensaje, setMensaje] = useState("");
+  const [error, setError] = useState("");
 
-  async function crearCuenta() {
-    if (loading) return;
+  useEffect(() => {
+    let activo = true;
 
-    setMensajeError(null);
+    async function comprobarSesionInicial() {
+      try {
+        const { data } = await supabase.auth.getSession();
 
-    if (!nombre.trim() || !apellidos.trim() || !nickname.trim()) {
-      setMensajeError("Completa nombre, apellidos y nickname.");
+        if (!activo) return;
+
+        if (data.session?.user) {
+          window.location.replace("/ligas");
+          return;
+        }
+      } catch {
+        // No bloqueamos la pantalla por errores de sesión vieja/caché.
+      } finally {
+        if (activo) setComprobandoSesion(false);
+      }
+    }
+
+    comprobarSesionInicial();
+
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  function limpiarMensajes() {
+    setError("");
+    setMensaje("");
+  }
+
+  function validarEmailPassword() {
+    if (!email.trim()) {
+      setError("Introduce tu email.");
+      return false;
+    }
+
+    if (modo !== "recuperar" && !password.trim()) {
+      setError("Introduce tu contraseña.");
+      return false;
+    }
+
+    if (modo !== "recuperar" && password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function handleLogin() {
+    limpiarMensajes();
+
+    if (!validarEmailPassword()) return;
+
+    setLoading(true);
+
+    try {
+      const emailNormalizado = email.trim().toLowerCase();
+
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: emailNormalizado,
+        password,
+      });
+
+      if (loginError) {
+        setError(loginError.message || "No se ha podido iniciar sesión.");
+        return;
+      }
+
+      const session = await esperarSesionReal();
+
+      if (!session?.user) {
+        setError(
+          "El login se ha realizado, pero la sesión no se ha confirmado correctamente. Pulsa Reintentar o cierra y abre de nuevo la app."
+        );
+        return;
+      }
+
+      const participante = await obtenerParticipanteActual();
+
+      if (!participante) {
+        setError(
+          "La sesión está iniciada, pero no se ha podido preparar tu perfil de participante. Pulsa Reintentar."
+        );
+        return;
+      }
+
+      window.location.replace("/ligas");
+    } catch (err) {
+      console.error("Error login:", err);
+      setError("Ha ocurrido un error iniciando sesión. Inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegistro() {
+    limpiarMensajes();
+
+    if (!validarEmailPassword()) return;
+
+    if (!nombre.trim()) {
+      setError("Introduce tu nombre.");
       return;
     }
 
-    if (!email.trim() || !password.trim()) {
-      setMensajeError("Introduce email y contraseña.");
+    if (!apellidos.trim()) {
+      setError("Introduce tus apellidos.");
       return;
     }
 
-    if (password.length < 6) {
-      setMensajeError("La contraseña debe tener al menos 6 caracteres.");
+    if (!nickname.trim()) {
+      setError("Introduce un nickname.");
       return;
     }
 
-    if (!aceptaPrivacidad || !aceptaTerminos) {
-      setMensajeError("Debes aceptar la política de privacidad y los términos.");
+    if (!aceptaLegal) {
+      setError("Debes aceptar la política de privacidad y los términos.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const { error } = await withTimeout(
-        supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: {
-              nombre: nombre.trim(),
-              apellidos: apellidos.trim(),
-              nickname: nickname.trim(),
-            },
+      const emailNormalizado = email.trim().toLowerCase();
+
+      const { data, error: registroError } = await supabase.auth.signUp({
+        email: emailNormalizado,
+        password,
+        options: {
+          data: {
+            nombre: nombre.trim(),
+            apellidos: apellidos.trim(),
+            nickname: nickname.trim(),
           },
-        }),
-        12000
-      );
+        },
+      });
 
-      if (error) {
-        setMensajeError(error.message);
+      if (registroError) {
+        setError(registroError.message || "No se ha podido crear la cuenta.");
         return;
       }
 
-      alert("Cuenta creada correctamente. Revisa tu email para confirmar la cuenta.");
+      if (data.session?.user) {
+        await esperarSesionReal();
+        await obtenerParticipanteActual();
+        window.location.replace("/ligas");
+        return;
+      }
 
-      setModoRegistro(false);
-      setPassword("");
-    } catch (error) {
-      setMensajeError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo crear la cuenta. Inténtalo de nuevo."
+      setMensaje(
+        "Cuenta creada. Revisa tu email para confirmar el registro antes de iniciar sesión."
       );
+      setModo("login");
+    } catch (err) {
+      console.error("Error registro:", err);
+      setError("Ha ocurrido un error creando la cuenta. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function iniciarSesion() {
-    if (loading) return;
-
-    setMensajeError(null);
-
-    if (!email.trim() || !password.trim()) {
-      setMensajeError("Introduce email y contraseña.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }),
-        12000
-      );
-
-      if (error) {
-        setMensajeError(error.message);
-        return;
-      }
-
-      window.location.assign("/ligas");
-    } catch (error) {
-      setMensajeError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo iniciar sesión. Inténtalo de nuevo."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function recuperarPassword() {
-    if (loading) return;
-
-    setMensajeError(null);
+  async function handleRecuperarPassword() {
+    limpiarMensajes();
 
     if (!email.trim()) {
-      setMensajeError("Introduce tu email primero.");
+      setError("Introduce tu email.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email.trim(), {
+      const emailNormalizado = email.trim().toLowerCase();
+
+      const { error: recuperarError } = await supabase.auth.resetPasswordForEmail(
+        emailNormalizado,
+        {
           redirectTo:
             typeof window !== "undefined"
               ? `${window.location.origin}/login`
               : undefined,
-        }),
-        12000
+        }
       );
 
-      if (error) {
-        setMensajeError(error.message);
+      if (recuperarError) {
+        setError(recuperarError.message || "No se ha podido enviar el email.");
         return;
       }
 
-      alert("Te hemos enviado un email para recuperar tu contraseña.");
-    } catch (error) {
-      setMensajeError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo enviar el email de recuperación."
-      );
+      setMensaje("Te hemos enviado un email para recuperar la contraseña.");
+    } catch (err) {
+      console.error("Error recuperación:", err);
+      setError("Ha ocurrido un error enviando el email de recuperación.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    if (loading) return;
+
+    if (modo === "login") {
+      await handleLogin();
+      return;
+    }
+
+    if (modo === "registro") {
+      await handleRegistro();
+      return;
+    }
+
+    await handleRecuperarPassword();
+  }
+
+  async function handleReintentarSesion() {
+    limpiarMensajes();
+    setLoading(true);
+
+    try {
+      const session = await esperarSesionReal();
+
+      if (!session?.user) {
+        setError("No hay una sesión activa. Vuelve a introducir email y contraseña.");
+        return;
+      }
+
+      await obtenerParticipanteActual();
+      window.location.replace("/ligas");
+    } catch (err) {
+      console.error("Error reintentando sesión:", err);
+      setError("No se ha podido recuperar la sesión. Prueba a iniciar sesión otra vez.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (comprobandoSesion) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
+        <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5 shadow-2xl">
+          <p className="text-sm text-slate-300">Comprobando sesión...</p>
+        </div>
+      </main>
+    );
+  }
+
+  const titulo =
+    modo === "login"
+      ? "Entrar en la porra"
+      : modo === "registro"
+        ? "Crear cuenta"
+        : "Recuperar contraseña";
+
+  const subtitulo =
+    modo === "login"
+      ? "Accede a tus ligas, pronósticos y rankings privados."
+      : modo === "registro"
+        ? "Crea tu usuario para competir en la Porra Mundial 2026."
+        : "Introduce tu email y te enviaremos un enlace de recuperación.";
+
   return (
-    <main className="loginPage">
-      <section className="loginCard">
-        <div className="iconBox">
-          <ShieldCheck size={34} />
-        </div>
-
-        <h1>{modoRegistro ? "Crear cuenta" : "Accede a tu porra"}</h1>
-
-        <p className="subtitle">
-          {modoRegistro
-            ? "Crea tu cuenta y empieza a competir con tus amigos."
-            : "Inicia sesión para guardar tus pronósticos."}
-        </p>
-
-        {mensajeError && (
-          <div className="errorBox">
-            <AlertTriangle size={18} />
-            <span>{mensajeError}</span>
+    <main className="min-h-screen bg-slate-950 text-white px-4 py-10 flex items-center justify-center">
+      <section className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-500/20 border border-blue-400/30 shadow-2xl shadow-blue-500/20">
+            <Trophy className="h-8 w-8 text-blue-300" />
           </div>
-        )}
 
-        {modoRegistro && (
-          <>
-            <label>Nombre</label>
-            <div className="inputBox">
-              <User size={20} />
-              <input
-                type="text"
-                placeholder="Jorge"
-                value={nombre}
-                disabled={loading}
-                onChange={(e) => setNombre(e.target.value)}
-              />
-            </div>
-
-            <label>Apellidos</label>
-            <div className="inputBox">
-              <User size={20} />
-              <input
-                type="text"
-                placeholder="Garriga"
-                value={apellidos}
-                disabled={loading}
-                onChange={(e) => setApellidos(e.target.value)}
-              />
-            </div>
-
-            <label>Nickname</label>
-            <div className="inputBox">
-              <UserRound size={20} />
-              <input
-                type="text"
-                placeholder="Garrigt"
-                value={nickname}
-                disabled={loading}
-                onChange={(e) => setNickname(e.target.value)}
-              />
-            </div>
-          </>
-        )}
-
-        <label>Email</label>
-        <div className="inputBox">
-          <Mail size={20} />
-          <input
-            type="email"
-            placeholder="tu@email.com"
-            value={email}
-            disabled={loading}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          <h1 className="text-3xl font-black tracking-tight">{titulo}</h1>
+          <p className="mt-3 text-sm text-slate-400">{subtitulo}</p>
         </div>
 
-        <label>Contraseña</label>
-        <div className="inputBox passwordBox">
-          <Lock size={20} />
-
-          <input
-            type={mostrarPassword ? "text" : "password"}
-            placeholder="********"
-            value={password}
-            disabled={loading}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <button
-            type="button"
-            className="togglePassword"
-            disabled={loading}
-            onClick={() => setMostrarPassword(!mostrarPassword)}
-          >
-            {mostrarPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-          </button>
-        </div>
-
-        {modoRegistro && (
-          <>
-            <label className="checkboxLabel">
-              <input
-                type="checkbox"
-                checked={aceptaPrivacidad}
-                disabled={loading}
-                onChange={(e) => setAceptaPrivacidad(e.target.checked)}
-              />
-
-              <span>
-                Acepto la <Link href="/privacidad">política de privacidad</Link>
-              </span>
-            </label>
-
-            <label className="checkboxLabel">
-              <input
-                type="checkbox"
-                checked={aceptaTerminos}
-                disabled={loading}
-                onChange={(e) => setAceptaTerminos(e.target.checked)}
-              />
-
-              <span>
-                Acepto los <Link href="/terminos">términos y condiciones</Link>
-              </span>
-            </label>
-          </>
-        )}
-
-        <button
-          type="button"
-          className="mainButton"
-          disabled={loading}
-          onClick={modoRegistro ? crearCuenta : iniciarSesion}
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 shadow-2xl backdrop-blur"
         >
-          {loading ? (
-            <>
-              <Loader2 size={20} className="spin" />
-              {modoRegistro ? "Creando cuenta..." : "Entrando..."}
-            </>
-          ) : modoRegistro ? (
-            "Crear cuenta"
-          ) : (
-            "Entrar"
+          {error && (
+            <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
+              <div className="flex gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    onClick={handleReintentarSesion}
+                    className="mt-3 rounded-xl bg-red-400/20 px-3 py-2 text-xs font-bold text-red-100 hover:bg-red-400/30"
+                  >
+                    Reintentar sesión
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
-        </button>
 
-        {!modoRegistro && (
+          {mensaje && (
+            <div className="mb-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+              {mensaje}
+            </div>
+          )}
+
+          {modo === "registro" && (
+            <>
+              <label className="mb-3 block">
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Nombre
+                </span>
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+                  <User className="h-4 w-4 text-slate-500" />
+                  <input
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
+                    placeholder="Tu nombre"
+                    autoComplete="given-name"
+                  />
+                </div>
+              </label>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Apellidos
+                </span>
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+                  <User className="h-4 w-4 text-slate-500" />
+                  <input
+                    value={apellidos}
+                    onChange={(e) => setApellidos(e.target.value)}
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
+                    placeholder="Tus apellidos"
+                    autoComplete="family-name"
+                  />
+                </div>
+              </label>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Nickname
+                </span>
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+                  <Trophy className="h-4 w-4 text-slate-500" />
+                  <input
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
+                    placeholder="Ej: Garrigt"
+                    autoComplete="nickname"
+                  />
+                </div>
+              </label>
+            </>
+          )}
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
+              Email
+            </span>
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+              <Mail className="h-4 w-4 text-slate-500" />
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
+                placeholder="tu@email.com"
+                type="email"
+                autoComplete="email"
+              />
+            </div>
+          </label>
+
+          {modo !== "recuperar" && (
+            <label className="mb-4 block">
+              <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Contraseña
+              </span>
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+                <Lock className="h-4 w-4 text-slate-500" />
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
+                  placeholder="Mínimo 6 caracteres"
+                  type={mostrarPassword ? "text" : "password"}
+                  autoComplete={modo === "login" ? "current-password" : "new-password"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarPassword((prev) => !prev)}
+                  className="text-slate-400 hover:text-white"
+                  aria-label="Mostrar u ocultar contraseña"
+                >
+                  {mostrarPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </label>
+          )}
+
+          {modo === "registro" && (
+            <label className="mb-4 flex items-start gap-3 text-xs text-slate-400">
+              <input
+                type="checkbox"
+                checked={aceptaLegal}
+                onChange={(e) => setAceptaLegal(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Acepto la política de privacidad y los términos de uso de la Porra Mundial.
+              </span>
+            </label>
+          )}
+
           <button
-            type="button"
-            className="linkButton"
+            type="submit"
             disabled={loading}
-            onClick={recuperarPassword}
+            className="w-full rounded-2xl bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-xl shadow-blue-500/25 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            ¿Has olvidado tu contraseña?
+            {loading
+              ? "Procesando..."
+              : modo === "login"
+                ? "Entrar"
+                : modo === "registro"
+                  ? "Crear cuenta"
+                  : "Enviar recuperación"}
           </button>
-        )}
 
-        <button
-          type="button"
-          className="switchButton"
-          disabled={loading}
-          onClick={() => {
-            setMensajeError(null);
-            setModoRegistro(!modoRegistro);
-          }}
-        >
-          {modoRegistro
-            ? "Ya tengo cuenta. Iniciar sesión"
-            : "No tengo cuenta. Crear una"}
-        </button>
+          <div className="mt-5 flex flex-col gap-2 text-center text-sm">
+            {modo !== "login" && (
+              <button
+                type="button"
+                onClick={() => {
+                  limpiarMensajes();
+                  setModo("login");
+                }}
+                className="text-blue-300 hover:text-blue-200"
+              >
+                Ya tengo cuenta
+              </button>
+            )}
+
+            {modo !== "registro" && (
+              <button
+                type="button"
+                onClick={() => {
+                  limpiarMensajes();
+                  setModo("registro");
+                }}
+                className="text-slate-300 hover:text-white"
+              >
+                Crear cuenta nueva
+              </button>
+            )}
+
+            {modo !== "recuperar" && (
+              <button
+                type="button"
+                onClick={() => {
+                  limpiarMensajes();
+                  setModo("recuperar");
+                }}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                He olvidado mi contraseña
+              </button>
+            )}
+          </div>
+        </form>
       </section>
-
-      <style>{`
-        .loginPage {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 32px 16px 120px;
-          background:
-            radial-gradient(circle at top, rgba(37,99,235,0.20), transparent 34%),
-            linear-gradient(180deg, #020617 0%, #111827 100%);
-          color: white;
-        }
-
-        .loginCard {
-          width: 100%;
-          max-width: 460px;
-          background: rgba(15,23,42,0.92);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 30px;
-          padding: 30px;
-          box-shadow: 0 30px 90px rgba(0,0,0,0.38);
-          backdrop-filter: blur(18px);
-        }
-
-        .iconBox {
-          width: 70px;
-          height: 70px;
-          border-radius: 24px;
-          background: #2563eb;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 18px;
-        }
-
-        h1 {
-          font-size: 34px;
-          font-weight: 950;
-          margin: 0;
-        }
-
-        .subtitle {
-          color: #94a3b8;
-          line-height: 1.5;
-          margin: 10px 0 22px;
-          font-weight: 700;
-        }
-
-        label {
-          display: block;
-          color: #cbd5e1;
-          font-size: 13px;
-          font-weight: 900;
-          margin: 14px 0 8px;
-        }
-
-        .inputBox {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: rgba(2,6,23,0.78);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 16px;
-          padding: 0 14px;
-          color: #94a3b8;
-        }
-
-        .inputBox input {
-          width: 100%;
-          height: 50px;
-          background: transparent;
-          border: none;
-          outline: none;
-          color: white;
-          font-weight: 800;
-          font-size: 15px;
-        }
-
-        .inputBox input:disabled {
-          opacity: 0.7;
-        }
-
-        .passwordBox {
-          padding-right: 6px;
-        }
-
-        .togglePassword {
-          width: 42px;
-          height: 42px;
-          border: none;
-          border-radius: 12px;
-          background: rgba(255,255,255,0.06);
-          color: #cbd5e1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-        }
-
-        .checkboxLabel {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          font-size: 13px;
-          line-height: 1.4;
-          margin-top: 14px;
-          color: #cbd5e1;
-        }
-
-        .checkboxLabel input {
-          margin-top: 2px;
-        }
-
-        .checkboxLabel a {
-          color: #93c5fd;
-          font-weight: 900;
-        }
-
-        .errorBox {
-          display: flex;
-          align-items: flex-start;
-          gap: 9px;
-          background: rgba(239,68,68,0.13);
-          border: 1px solid rgba(239,68,68,0.28);
-          color: #fecaca;
-          border-radius: 16px;
-          padding: 12px 14px;
-          margin: 14px 0;
-          font-size: 13px;
-          font-weight: 800;
-          line-height: 1.35;
-        }
-
-        .mainButton {
-          width: 100%;
-          height: 54px;
-          border: none;
-          border-radius: 17px;
-          background: #2563eb;
-          color: white;
-          font-weight: 950;
-          font-size: 16px;
-          margin-top: 22px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 9px;
-          cursor: pointer;
-          font-family: inherit;
-        }
-
-        .mainButton:disabled {
-          opacity: 0.72;
-          cursor: not-allowed;
-        }
-
-        .linkButton,
-        .switchButton {
-          width: 100%;
-          border: none;
-          background: transparent;
-          color: #93c5fd;
-          font-weight: 900;
-          cursor: pointer;
-          font-family: inherit;
-        }
-
-        .linkButton {
-          margin-top: 16px;
-        }
-
-        .switchButton {
-          margin-top: 18px;
-          color: #cbd5e1;
-        }
-
-        .linkButton:disabled,
-        .switchButton:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .spin {
-          animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 520px) {
-          .loginPage {
-            align-items: flex-start;
-            padding: 24px 12px 120px;
-          }
-
-          .loginCard {
-            padding: 24px;
-            border-radius: 26px;
-          }
-
-          h1 {
-            font-size: 30px;
-          }
-        }
-      `}</style>
     </main>
   );
 }
