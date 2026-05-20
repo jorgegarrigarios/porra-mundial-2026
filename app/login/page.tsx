@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Eye, EyeOff, Lock, Mail, User, Trophy, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { obtenerParticipanteActual } from "@/lib/participante";
@@ -11,7 +11,27 @@ function esperar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function esperarSesionReal(intentos = 20, pausaMs = 250) {
+async function conTimeout<T>(
+  promesa: Promise<T>,
+  ms: number,
+  mensaje = "La operación ha tardado demasiado."
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(mensaje));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promesa, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function esperarSesionReal(intentos = 12, pausaMs = 250) {
   for (let i = 0; i < intentos; i++) {
     const { data, error } = await supabase.auth.getSession();
 
@@ -23,6 +43,28 @@ async function esperarSesionReal(intentos = 20, pausaMs = 250) {
   }
 
   return null;
+}
+
+function traducirErrorAuth(mensaje: string) {
+  const texto = mensaje.toLowerCase();
+
+  if (texto.includes("invalid login credentials")) {
+    return "Email o contraseña incorrectos.";
+  }
+
+  if (texto.includes("email not confirmed")) {
+    return "Tu email todavía no está confirmado. Revisa tu correo antes de entrar.";
+  }
+
+  if (texto.includes("rate limit")) {
+    return "Has hecho demasiados intentos. Espera un momento y vuelve a probar.";
+  }
+
+  if (texto.includes("timeout") || texto.includes("tardado demasiado")) {
+    return "La conexión ha tardado demasiado. Revisa tu conexión e inténtalo de nuevo.";
+  }
+
+  return mensaje || "No se ha podido completar la operación.";
 }
 
 export default function LoginPage() {
@@ -39,36 +81,8 @@ export default function LoginPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [comprobandoSesion, setComprobandoSesion] = useState(true);
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let activo = true;
-
-    async function comprobarSesionInicial() {
-      try {
-        const { data } = await supabase.auth.getSession();
-
-        if (!activo) return;
-
-        if (data.session?.user) {
-          window.location.replace("/ligas");
-          return;
-        }
-      } catch {
-        // No bloqueamos la pantalla por errores de sesión vieja/caché.
-      } finally {
-        if (activo) setComprobandoSesion(false);
-      }
-    }
-
-    comprobarSesionInicial();
-
-    return () => {
-      activo = false;
-    };
-  }, []);
 
   function limpiarMensajes() {
     setError("");
@@ -76,8 +90,15 @@ export default function LoginPage() {
   }
 
   function validarEmailPassword() {
-    if (!email.trim()) {
+    const emailNormalizado = email.trim().toLowerCase();
+
+    if (!emailNormalizado) {
       setError("Introduce tu email.");
+      return false;
+    }
+
+    if (!emailNormalizado.includes("@")) {
+      setError("Introduce un email válido.");
       return false;
     }
 
@@ -104,13 +125,24 @@ export default function LoginPage() {
     try {
       const emailNormalizado = email.trim().toLowerCase();
 
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: emailNormalizado,
-        password,
-      });
+      await supabase.auth.signOut();
+
+      const { data, error: loginError } = await conTimeout(
+        supabase.auth.signInWithPassword({
+          email: emailNormalizado,
+          password,
+        }),
+        10000,
+        "El inicio de sesión ha tardado demasiado."
+      );
 
       if (loginError) {
-        setError(loginError.message || "No se ha podido iniciar sesión.");
+        setError(traducirErrorAuth(loginError.message));
+        return;
+      }
+
+      if (!data.user) {
+        setError("No se ha podido iniciar sesión. Inténtalo de nuevo.");
         return;
       }
 
@@ -118,24 +150,34 @@ export default function LoginPage() {
 
       if (!session?.user) {
         setError(
-          "El login se ha realizado, pero la sesión no se ha confirmado correctamente. Pulsa Reintentar o cierra y abre de nuevo la app."
+          "No se ha podido confirmar la sesión. Pulsa de nuevo en Entrar o recarga la página."
         );
         return;
       }
 
-      const participante = await obtenerParticipanteActual();
+      const participante = await conTimeout(
+        obtenerParticipanteActual(),
+        10000,
+        "La preparación de tu perfil ha tardado demasiado."
+      );
 
       if (!participante) {
         setError(
-          "La sesión está iniciada, pero no se ha podido preparar tu perfil de participante. Pulsa Reintentar."
+          "Has iniciado sesión, pero no se ha podido cargar tu perfil de participante. Revisa la tabla participantes/RLS."
         );
         return;
       }
 
-      window.location.replace("/ligas");
+      window.location.href = "/ligas";
     } catch (err) {
       console.error("Error login:", err);
-      setError("Ha ocurrido un error iniciando sesión. Inténtalo de nuevo.");
+
+      const mensajeError =
+        err instanceof Error
+          ? traducirErrorAuth(err.message)
+          : "Ha ocurrido un error iniciando sesión. Inténtalo de nuevo.";
+
+      setError(mensajeError);
     } finally {
       setLoading(false);
     }
@@ -171,27 +213,42 @@ export default function LoginPage() {
     try {
       const emailNormalizado = email.trim().toLowerCase();
 
-      const { data, error: registroError } = await supabase.auth.signUp({
-        email: emailNormalizado,
-        password,
-        options: {
-          data: {
-            nombre: nombre.trim(),
-            apellidos: apellidos.trim(),
-            nickname: nickname.trim(),
+      const { data, error: registroError } = await conTimeout(
+        supabase.auth.signUp({
+          email: emailNormalizado,
+          password,
+          options: {
+            data: {
+              nombre: nombre.trim(),
+              apellidos: apellidos.trim(),
+              nickname: nickname.trim(),
+            },
           },
-        },
-      });
+        }),
+        10000,
+        "El registro ha tardado demasiado."
+      );
 
       if (registroError) {
-        setError(registroError.message || "No se ha podido crear la cuenta.");
+        setError(traducirErrorAuth(registroError.message));
         return;
       }
 
       if (data.session?.user) {
-        await esperarSesionReal();
-        await obtenerParticipanteActual();
-        window.location.replace("/ligas");
+        const participante = await conTimeout(
+          obtenerParticipanteActual(),
+          10000,
+          "La preparación de tu perfil ha tardado demasiado."
+        );
+
+        if (!participante) {
+          setError(
+            "Cuenta creada, pero no se ha podido preparar tu perfil. Revisa participantes/RLS."
+          );
+          return;
+        }
+
+        window.location.href = "/ligas";
         return;
       }
 
@@ -201,7 +258,13 @@ export default function LoginPage() {
       setModo("login");
     } catch (err) {
       console.error("Error registro:", err);
-      setError("Ha ocurrido un error creando la cuenta. Inténtalo de nuevo.");
+
+      const mensajeError =
+        err instanceof Error
+          ? traducirErrorAuth(err.message)
+          : "Ha ocurrido un error creando la cuenta. Inténtalo de nuevo.";
+
+      setError(mensajeError);
     } finally {
       setLoading(false);
     }
@@ -220,25 +283,32 @@ export default function LoginPage() {
     try {
       const emailNormalizado = email.trim().toLowerCase();
 
-      const { error: recuperarError } = await supabase.auth.resetPasswordForEmail(
-        emailNormalizado,
-        {
+      const { error: recuperarError } = await conTimeout(
+        supabase.auth.resetPasswordForEmail(emailNormalizado, {
           redirectTo:
             typeof window !== "undefined"
               ? `${window.location.origin}/login`
               : undefined,
-        }
+        }),
+        10000,
+        "La recuperación de contraseña ha tardado demasiado."
       );
 
       if (recuperarError) {
-        setError(recuperarError.message || "No se ha podido enviar el email.");
+        setError(traducirErrorAuth(recuperarError.message));
         return;
       }
 
       setMensaje("Te hemos enviado un email para recuperar la contraseña.");
     } catch (err) {
       console.error("Error recuperación:", err);
-      setError("Ha ocurrido un error enviando el email de recuperación.");
+
+      const mensajeError =
+        err instanceof Error
+          ? traducirErrorAuth(err.message)
+          : "Ha ocurrido un error enviando el email de recuperación.";
+
+      setError(mensajeError);
     } finally {
       setLoading(false);
     }
@@ -262,36 +332,15 @@ export default function LoginPage() {
     await handleRecuperarPassword();
   }
 
-  async function handleReintentarSesion() {
-    limpiarMensajes();
-    setLoading(true);
+  async function handleReintentarLogin() {
+    if (loading) return;
 
-    try {
-      const session = await esperarSesionReal();
-
-      if (!session?.user) {
-        setError("No hay una sesión activa. Vuelve a introducir email y contraseña.");
-        return;
-      }
-
-      await obtenerParticipanteActual();
-      window.location.replace("/ligas");
-    } catch (err) {
-      console.error("Error reintentando sesión:", err);
-      setError("No se ha podido recuperar la sesión. Prueba a iniciar sesión otra vez.");
-    } finally {
-      setLoading(false);
+    if (modo !== "login") {
+      setModo("login");
+      return;
     }
-  }
 
-  if (comprobandoSesion) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
-        <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5 shadow-2xl">
-          <p className="text-sm text-slate-300">Comprobando sesión...</p>
-        </div>
-      </main>
-    );
+    await handleLogin();
   }
 
   const titulo =
@@ -328,15 +377,19 @@ export default function LoginPage() {
             <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
               <div className="flex gap-2">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
+                <div className="w-full">
                   <p>{error}</p>
-                  <button
-                    type="button"
-                    onClick={handleReintentarSesion}
-                    className="mt-3 rounded-xl bg-red-400/20 px-3 py-2 text-xs font-bold text-red-100 hover:bg-red-400/30"
-                  >
-                    Reintentar sesión
-                  </button>
+
+                  {modo === "login" && (
+                    <button
+                      type="button"
+                      onClick={handleReintentarLogin}
+                      disabled={loading}
+                      className="mt-3 rounded-xl bg-red-400/20 px-3 py-2 text-xs font-bold text-red-100 hover:bg-red-400/30 disabled:opacity-60"
+                    >
+                      Reintentar login
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -468,7 +521,7 @@ export default function LoginPage() {
             className="w-full rounded-2xl bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-xl shadow-blue-500/25 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading
-              ? "Procesando..."
+              ? "Entrando..."
               : modo === "login"
                 ? "Entrar"
                 : modo === "registro"

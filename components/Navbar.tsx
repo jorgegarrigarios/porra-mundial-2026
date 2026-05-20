@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import {
+  obtenerNombreVisibleParticipante,
+  obtenerParticipanteActual,
+} from "@/lib/participante";
 
 const links = [
   {
@@ -56,22 +60,24 @@ const links = [
   },
 ];
 
-type ParticipanteNavbar = {
-  role?: string | null;
-  nickname?: string | null;
-  nombre?: string | null;
-};
+async function conTimeout<T>(
+  promesa: Promise<T>,
+  ms: number,
+  mensaje = "La operación ha tardado demasiado."
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-function obtenerNombreVisible(
-  participante: ParticipanteNavbar | null,
-  email?: string | null
-) {
-  return (
-    participante?.nickname?.trim() ||
-    participante?.nombre?.trim() ||
-    email?.trim() ||
-    "Usuario"
-  );
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(mensaje));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promesa, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 export default function Navbar() {
@@ -90,24 +96,15 @@ export default function Navbar() {
   useEffect(() => {
     let mounted = true;
 
-    async function cargarUsuario(userId: string, email?: string | null) {
-      const { data: participante } = await supabase
-        .from("participantes")
-        .select("role, nickname, nombre")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-
-      if (!mounted) return;
-
-      setNombreVisible(obtenerNombreVisible(participante, email));
-      setIsAdmin(participante?.role === "admin");
-    }
-
-    async function cargarSesion() {
+    async function cargarUsuarioDesdeSesion() {
       try {
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await conTimeout(
+          supabase.auth.getSession(),
+          5000,
+          "Timeout cargando sesión en navbar."
+        );
 
         if (!mounted) return;
 
@@ -119,13 +116,31 @@ export default function Navbar() {
           return;
         }
 
-        await cargarUsuario(user.id, user.email);
+        setNombreVisible(user.email || "Usuario");
+        setIsAdmin(false);
+
+        const participante = await conTimeout(
+          obtenerParticipanteActual(),
+          8000,
+          "Timeout cargando participante en navbar."
+        );
+
+        if (!mounted) return;
+
+        setNombreVisible(
+          obtenerNombreVisibleParticipante(participante, user.email)
+        );
+        setIsAdmin(participante?.role === "admin");
       } catch (error) {
         console.error("Error cargando sesión navbar:", error);
+
+        if (!mounted) return;
+
+        setIsAdmin(false);
       }
     }
 
-    cargarSesion();
+    cargarUsuarioDesdeSesion();
 
     const {
       data: { subscription },
@@ -140,7 +155,30 @@ export default function Navbar() {
         return;
       }
 
-      await cargarUsuario(user.id, user.email);
+      setNombreVisible(user.email || "Usuario");
+      setIsAdmin(false);
+
+      try {
+        const participante = await conTimeout(
+          obtenerParticipanteActual(),
+          8000,
+          "Timeout cargando participante tras cambio auth."
+        );
+
+        if (!mounted) return;
+
+        setNombreVisible(
+          obtenerNombreVisibleParticipante(participante, user.email)
+        );
+        setIsAdmin(participante?.role === "admin");
+      } catch (error) {
+        console.error("Error cargando participante tras cambio auth:", error);
+
+        if (!mounted) return;
+
+        setNombreVisible(user.email || "Usuario");
+        setIsAdmin(false);
+      }
     });
 
     return () => {
@@ -152,8 +190,11 @@ export default function Navbar() {
   async function cerrarSesion() {
     try {
       await supabase.auth.signOut();
+      setNombreVisible(null);
+      setIsAdmin(false);
     } finally {
       router.replace("/login");
+      router.refresh();
     }
   }
 
@@ -514,6 +555,7 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             font-family: inherit;
             font-size: 14px;
+            cursor: pointer;
           }
 
           .mobileUserBadge {
