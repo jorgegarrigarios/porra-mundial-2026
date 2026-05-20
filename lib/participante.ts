@@ -5,7 +5,6 @@ export type ParticipanteActual = {
   nombre: string | null;
   apellidos?: string | null;
   nickname?: string | null;
-  email?: string | null;
   role?: string | null;
   acepta_privacidad?: boolean | null;
   acepta_terminos?: boolean | null;
@@ -16,7 +15,6 @@ type ParticipanteRow = {
   nombre: string | null;
   apellidos: string | null;
   nickname: string | null;
-  email: string | null;
   role: string | null;
   acepta_privacidad: boolean | null;
   acepta_terminos: boolean | null;
@@ -47,7 +45,6 @@ function normalizarParticipante(
     nombre: participante.nombre,
     apellidos: participante.apellidos,
     nickname: participante.nickname,
-    email: participante.email,
     role: participante.role,
     acepta_privacidad: participante.acepta_privacidad,
     acepta_terminos: participante.acepta_terminos,
@@ -95,8 +92,6 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
       return null;
     }
 
-    const emailNormalizado = limpiarTexto(user.email?.toLowerCase()) || null;
-
     const nombreMetadata = limpiarTexto(
       typeof user.user_metadata?.nombre === "string"
         ? user.user_metadata.nombre
@@ -116,15 +111,15 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
     );
 
     const nombreFallback =
-      nombreMetadata || crearNombreDesdeEmail(emailNormalizado);
+      nombreMetadata || crearNombreDesdeEmail(user.email);
 
     const nicknameFallback = nicknameMetadata || nombreFallback;
 
-    const participantePorAuthResponse = (await conTimeout(
+    const participanteResponse = (await conTimeout(
       supabase
         .from("participantes")
         .select(
-          "id, nombre, apellidos, nickname, email, role, acepta_privacidad, acepta_terminos"
+          "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
         )
         .eq("auth_user_id", user.id)
         .maybeSingle(),
@@ -132,90 +127,70 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
       "Timeout buscando participante por auth_user_id."
     )) as SupabaseResponse<ParticipanteRow>;
 
-    if (participantePorAuthResponse.error) {
+    if (participanteResponse.error) {
       console.error(
         "Error buscando participante por auth_user_id:",
-        participantePorAuthResponse.error.message
+        participanteResponse.error.message
       );
 
       return null;
     }
 
-    if (participantePorAuthResponse.data) {
-      return normalizarParticipante(participantePorAuthResponse.data);
-    }
+    if (participanteResponse.data) {
+      const participanteExistente = participanteResponse.data;
 
-    if (emailNormalizado) {
-      const participantePorEmailResponse = (await conTimeout(
+      const necesitaActualizar =
+        !participanteExistente.nombre ||
+        !participanteExistente.nickname ||
+        !participanteExistente.role ||
+        participanteExistente.acepta_privacidad !== true ||
+        participanteExistente.acepta_terminos !== true;
+
+      if (!necesitaActualizar) {
+        return normalizarParticipante(participanteExistente);
+      }
+
+      const participanteActualizadoResponse = (await conTimeout(
         supabase
           .from("participantes")
+          .update({
+            nombre: participanteExistente.nombre || nombreFallback,
+            apellidos:
+              participanteExistente.apellidos || apellidosMetadata || null,
+            nickname: participanteExistente.nickname || nicknameFallback,
+            role: participanteExistente.role || "user",
+            acepta_privacidad: true,
+            acepta_terminos: true,
+          })
+          .eq("auth_user_id", user.id)
           .select(
-            "id, nombre, apellidos, nickname, email, role, acepta_privacidad, acepta_terminos"
+            "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
           )
-          .eq("email", emailNormalizado)
-          .maybeSingle(),
+          .single(),
         8000,
-        "Timeout buscando participante por email."
+        "Timeout actualizando participante existente."
       )) as SupabaseResponse<ParticipanteRow>;
 
-      if (participantePorEmailResponse.error) {
+      if (participanteActualizadoResponse.error) {
         console.error(
-          "Error buscando participante por email:",
-          participantePorEmailResponse.error.message
+          "Error actualizando participante existente:",
+          participanteActualizadoResponse.error.message
         );
 
-        return null;
+        return normalizarParticipante(participanteExistente);
       }
 
-      if (participantePorEmailResponse.data) {
-        const participanteExistente = participantePorEmailResponse.data;
-
-        const participanteActualizadoResponse = (await conTimeout(
-          supabase
-            .from("participantes")
-            .update({
-              auth_user_id: user.id,
-              nombre: participanteExistente.nombre || nombreFallback,
-              apellidos:
-                participanteExistente.apellidos || apellidosMetadata || null,
-              nickname: participanteExistente.nickname || nicknameFallback,
-              email: participanteExistente.email || emailNormalizado,
-              role: participanteExistente.role || "user",
-              acepta_privacidad: true,
-              acepta_terminos: true,
-            })
-            .eq("id", participanteExistente.id)
-            .select(
-              "id, nombre, apellidos, nickname, email, role, acepta_privacidad, acepta_terminos"
-            )
-            .single(),
-          8000,
-          "Timeout vinculando participante existente."
-        )) as SupabaseResponse<ParticipanteRow>;
-
-        if (participanteActualizadoResponse.error) {
-          console.error(
-            "Error vinculando participante existente:",
-            participanteActualizadoResponse.error.message
-          );
-
-          return null;
-        }
-
-        if (!participanteActualizadoResponse.data) {
-          console.error("No se recibió participante actualizado.");
-          return null;
-        }
-
-        return normalizarParticipante(participanteActualizadoResponse.data);
+      if (!participanteActualizadoResponse.data) {
+        return normalizarParticipante(participanteExistente);
       }
+
+      return normalizarParticipante(participanteActualizadoResponse.data);
     }
 
     const nuevoParticipante = {
       nombre: nombreFallback,
       apellidos: apellidosMetadata || null,
       nickname: nicknameFallback,
-      email: emailNormalizado,
       auth_user_id: user.id,
       role: "user",
       acepta_privacidad: true,
@@ -227,7 +202,7 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
         .from("participantes")
         .insert(nuevoParticipante)
         .select(
-          "id, nombre, apellidos, nickname, email, role, acepta_privacidad, acepta_terminos"
+          "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
         )
         .single(),
       8000,
