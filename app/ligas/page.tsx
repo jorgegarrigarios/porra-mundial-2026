@@ -15,6 +15,7 @@ import {
   ArrowRight,
   AlertCircle,
   RefreshCw,
+  Target,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -67,16 +68,12 @@ function normalizarLigaRelacion(ligas: Liga | Liga[] | null): Liga | null {
 
 export default function LigasPage() {
   const [participante, setParticipante] = useState<Participante | null>(null);
-
   const [misLigas, setMisLigas] = useState<Liga[]>([]);
   const [ligasPendientes, setLigasPendientes] = useState<Liga[]>([]);
-
   const [nombreLiga, setNombreLiga] = useState("");
   const [codigoLiga, setCodigoLiga] = useState("");
-
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [loadingAccion, setLoadingAccion] = useState(false);
-
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
@@ -105,9 +102,7 @@ export default function LigasPage() {
       if (!participanteActual) {
         setMisLigas([]);
         setLigasPendientes([]);
-        setError(
-          "No se ha podido cargar tu perfil. Cierra sesión y vuelve a entrar."
-        );
+        setError("No se ha podido cargar tu perfil. Cierra sesión y vuelve a entrar.");
         return;
       }
 
@@ -139,11 +134,9 @@ export default function LigasPage() {
           .map((item) => normalizarLigaRelacion(item.ligas))
           .filter((liga): liga is Liga => Boolean(liga)) ?? [];
 
-      const activas = ligasMiembro.filter((liga) => liga.estado === "activa");
+      setMisLigas(ligasMiembro.filter((liga) => liga.estado === "activa"));
 
-      setMisLigas(activas);
-
-      const { data: pendientes, error: pendientesError } = await conTimeout(
+      const { data: pendientes } = await conTimeout(
         supabase
           .from("ligas")
           .select("id, nombre, codigo, estado")
@@ -153,22 +146,10 @@ export default function LigasPage() {
         "La carga de ligas pendientes ha tardado demasiado."
       );
 
-      if (pendientesError) {
-        console.error("Error cargando ligas pendientes:", pendientesError);
-        setLigasPendientes([]);
-        return;
-      }
-
       setLigasPendientes((pendientes ?? []) as Liga[]);
     } catch (err) {
       console.error("Error cargando pantalla de ligas:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? err.message
-          : "Ha ocurrido un error cargando tus ligas.";
-
-      setError(mensajeError);
+      setError(err instanceof Error ? err.message : "Ha ocurrido un error cargando tus ligas.");
     } finally {
       setLoadingInicial(false);
     }
@@ -194,12 +175,10 @@ export default function LigasPage() {
     setLoadingAccion(true);
 
     try {
-      const codigo = generarCodigo();
-
       const { error: insertError } = await conTimeout(
         supabase.from("ligas").insert({
           nombre: nombreLiga.trim(),
-          codigo,
+          codigo: generarCodigo(),
           creador_id: participante.id,
           estado: "pendiente",
         }),
@@ -215,17 +194,10 @@ export default function LigasPage() {
 
       setNombreLiga("");
       setMensaje("Solicitud enviada correctamente. Queda pendiente de aprobación.");
-
       await cargar();
     } catch (err) {
       console.error("Error solicitando liga:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? err.message
-          : "Ha ocurrido un error solicitando la liga.";
-
-      setError(mensajeError);
+      setError(err instanceof Error ? err.message : "Ha ocurrido un error solicitando la liga.");
     } finally {
       setLoadingAccion(false);
     }
@@ -271,9 +243,7 @@ export default function LigasPage() {
         return;
       }
 
-      const yaExiste = misLigas.some((ligaActual) => ligaActual.id === liga.id);
-
-      if (yaExiste) {
+      if (misLigas.some((ligaActual) => ligaActual.id === liga.id)) {
         setError("Ya perteneces a esta liga.");
         return;
       }
@@ -295,17 +265,10 @@ export default function LigasPage() {
 
       setCodigoLiga("");
       setMensaje("Te has unido correctamente a la liga.");
-
       await cargar();
     } catch (err) {
       console.error("Error uniéndose a liga:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? err.message
-          : "Ha ocurrido un error uniéndote a la liga.";
-
-      setError(mensajeError);
+      setError(err instanceof Error ? err.message : "Ha ocurrido un error uniéndote a la liga.");
     } finally {
       setLoadingAccion(false);
     }
@@ -322,6 +285,8 @@ export default function LigasPage() {
     }
   }
 
+  const tieneLigasActivas = misLigas.length > 0;
+
   return (
     <main className="ligasPage">
       <div className="ligasContainer">
@@ -333,20 +298,16 @@ export default function LigasPage() {
           <div>
             <p className="eyebrow">Centro de competición</p>
             <h1>Ligas privadas</h1>
-
             <p>
-              Crea ligas privadas, únete con código y compite en rankings
-              independientes.
+              {tieneLigasActivas
+                ? "Entra en tu liga y continúa haciendo tus pronósticos."
+                : "Únete con código o solicita una liga para empezar a competir."}
             </p>
           </div>
         </div>
 
         {(error || mensaje) && (
-          <div
-            className={`feedbackBox ${
-              error ? "feedbackError" : "feedbackSuccess"
-            }`}
-          >
+          <div className={`feedbackBox ${error ? "feedbackError" : "feedbackSuccess"}`}>
             <div className="feedbackContent">
               {error ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
               <span>{error || mensaje}</span>
@@ -373,40 +334,70 @@ export default function LigasPage() {
           </section>
         ) : (
           <>
-            <div className="actionsGrid">
-              <section className="actionCard">
-                <div className="cardTop">
-                  <div className="smallIcon">
-                    <Plus size={23} />
+            {tieneLigasActivas && (
+              <section className="continueSection">
+                <div className="sectionHeader">
+                  <div className="sectionTitle">
+                    <Trophy size={25} />
+                    <h2>Continúa tu competición</h2>
                   </div>
 
-                  <h2>Solicitar liga</h2>
+                  <span className="countPill">
+                    {misLigas.length} {misLigas.length === 1 ? "liga activa" : "ligas activas"}
+                  </span>
                 </div>
 
-                <p className="cardText">
-                  La liga quedará pendiente hasta que un administrador la
-                  apruebe.
-                </p>
+                <div className="leaguesGrid priorityGrid">
+                  {misLigas.map((liga) => (
+                    <article key={liga.id} className="leagueCard priorityCard">
+                      <div className="leagueCardTop">
+                        <div>
+                          <p className="leagueLabel">Tu liga</p>
+                          <h3>{liga.nombre}</h3>
+                        </div>
 
-                <input
-                  className="leagueInput"
-                  type="text"
-                  placeholder="Liga Familia"
-                  value={nombreLiga}
-                  onChange={(e) => setNombreLiga(e.target.value)}
-                  disabled={loadingAccion}
-                />
+                        <EstadoLiga estado={liga.estado} />
+                      </div>
 
-                <button
-                  type="button"
-                  className="primaryButton"
-                  onClick={solicitarLiga}
-                  disabled={loadingAccion}
-                >
-                  {loadingAccion ? "Procesando..." : "Solicitar liga"}
-                </button>
+                      <div className="leagueBottom">
+                        <div>
+                          <p className="leagueCodeLabel">Código para invitar</p>
+                          <p className="leagueCode">{liga.codigo}</p>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="copyButton"
+                          onClick={() => copiarCodigo(liga.codigo)}
+                          aria-label="Copiar código de liga"
+                        >
+                          <Copy size={18} />
+                        </button>
+                      </div>
+
+                      <Link href={`/ligas/${liga.id}`} className="mainLeagueButton">
+                        <Target size={19} />
+                        Entrar y hacer pronósticos
+                        <ArrowRight size={18} />
+                      </Link>
+                    </article>
+                  ))}
+                </div>
               </section>
+            )}
 
+            {!tieneLigasActivas && (
+              <section className="emptyHero">
+                <Trophy size={34} />
+                <h2>Aún no estás en ninguna liga</h2>
+                <p>
+                  Lo más rápido es introducir el código que te hayan enviado. Si quieres crear una liga nueva,
+                  puedes solicitarla y quedará pendiente de aprobación.
+                </p>
+              </section>
+            )}
+
+            <div className={`actionsGrid ${tieneLigasActivas ? "secondaryActions" : ""}`}>
               <section className="actionCard featuredCard">
                 <div className="cardTop">
                   <div className="smallIcon">
@@ -438,83 +429,45 @@ export default function LigasPage() {
                   {loadingAccion ? "Procesando..." : "Unirse a liga"}
                 </button>
               </section>
+
+              <section className="actionCard">
+                <div className="cardTop">
+                  <div className="smallIcon">
+                    <Plus size={23} />
+                  </div>
+
+                  <h2>Solicitar liga</h2>
+                </div>
+
+                <p className="cardText">
+                  La liga quedará pendiente hasta que un administrador la apruebe.
+                </p>
+
+                <input
+                  className="leagueInput"
+                  type="text"
+                  placeholder="Liga Familia"
+                  value={nombreLiga}
+                  onChange={(e) => setNombreLiga(e.target.value)}
+                  disabled={loadingAccion}
+                />
+
+                <button
+                  type="button"
+                  className="primaryButton secondaryButton"
+                  onClick={solicitarLiga}
+                  disabled={loadingAccion}
+                >
+                  {loadingAccion ? "Procesando..." : "Solicitar liga"}
+                </button>
+              </section>
             </div>
-
-            <section className="myLeagues">
-              <div className="sectionHeader">
-                <div className="sectionTitle">
-                  <Trophy size={25} />
-
-                  <h2>Mis ligas</h2>
-                </div>
-
-                {misLigas.length > 0 && (
-                  <span className="countPill">
-                    {misLigas.length}{" "}
-                    {misLigas.length === 1 ? "liga activa" : "ligas activas"}
-                  </span>
-                )}
-              </div>
-
-              {misLigas.length === 0 ? (
-                <div className="emptyBox">
-                  <Trophy size={28} />
-                  <h3>Aún no perteneces a ninguna liga activa</h3>
-                  <p>
-                    Crea una nueva liga o introduce un código para empezar a
-                    competir.
-                  </p>
-                </div>
-              ) : (
-                <div className="leaguesGrid">
-                  {misLigas.map((liga) => (
-                    <article key={liga.id} className="leagueCard">
-                      <div className="leagueCardTop">
-                        <div>
-                          <p className="leagueLabel">Liga</p>
-
-                          <h3>{liga.nombre}</h3>
-                        </div>
-
-                        <EstadoLiga estado={liga.estado} />
-                      </div>
-
-                      <div className="leagueBottom">
-                        <div>
-                          <p className="leagueCodeLabel">Código</p>
-
-                          <p className="leagueCode">{liga.codigo}</p>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="copyButton"
-                          onClick={() => copiarCodigo(liga.codigo)}
-                          aria-label="Copiar código de liga"
-                        >
-                          <Copy size={18} />
-                        </button>
-                      </div>
-
-                      <Link
-                        href={`/ligas/${liga.id}`}
-                        className="ligaDetailButton"
-                      >
-                        Entrar en la liga
-                        <ArrowRight size={18} />
-                      </Link>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
 
             {ligasPendientes.length > 0 && (
               <section className="pendingSection">
                 <div className="sectionHeader">
                   <div className="sectionTitle">
                     <Clock3 size={24} />
-
                     <h2>Pendientes de aprobación</h2>
                   </div>
                 </div>
@@ -525,7 +478,6 @@ export default function LigasPage() {
                       <div className="leagueCardTop">
                         <div>
                           <p className="leagueLabel">Liga</p>
-
                           <h3>{liga.nombre}</h3>
                         </div>
 
@@ -533,8 +485,7 @@ export default function LigasPage() {
                       </div>
 
                       <div className="pendingInfo">
-                        Tu solicitud está pendiente de revisión por un
-                        administrador.
+                        Tu solicitud está pendiente de revisión por un administrador.
                       </div>
                     </article>
                   ))}
@@ -651,23 +602,35 @@ export default function LigasPage() {
           font-family: inherit;
         }
 
-        .retryButton:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-
-        .loadingCard {
-          min-height: 260px;
+        .loadingCard,
+        .emptyHero {
+          min-height: 230px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 16px;
+          gap: 14px;
           background: rgba(15,23,42,0.72);
           border: 1px solid rgba(255,255,255,0.10);
           border-radius: 30px;
           color: #94a3b8;
-          font-weight: 900;
+          text-align: center;
+          margin-bottom: 28px;
+          padding: 26px;
+        }
+
+        .emptyHero h2 {
+          color: white;
+          font-size: 30px;
+          font-weight: 950;
+          margin: 0;
+        }
+
+        .emptyHero p {
+          max-width: 650px;
+          margin: 0;
+          line-height: 1.55;
+          font-weight: 750;
         }
 
         .spinner {
@@ -680,9 +643,42 @@ export default function LigasPage() {
         }
 
         @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
+          to { transform: rotate(360deg); }
+        }
+
+        .continueSection {
+          margin-bottom: 34px;
+        }
+
+        .sectionHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 22px;
+        }
+
+        .sectionTitle {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .sectionTitle h2 {
+          font-size: clamp(30px, 4vw, 40px);
+          font-weight: 950;
+          margin: 0;
+          letter-spacing: -0.03em;
+        }
+
+        .countPill {
+          border-radius: 999px;
+          padding: 9px 13px;
+          color: #bfdbfe;
+          background: rgba(37,99,235,0.13);
+          border: 1px solid rgba(96,165,250,0.22);
+          font-weight: 900;
+          font-size: 13px;
         }
 
         .actionsGrid {
@@ -692,18 +688,22 @@ export default function LigasPage() {
           margin-bottom: 46px;
         }
 
+        .secondaryActions {
+          opacity: 0.92;
+        }
+
         .actionCard,
         .leagueCard {
-          background:
-            linear-gradient(
-              145deg,
-              rgba(15,23,42,0.98),
-              rgba(15,23,42,0.68)
-            );
+          background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.68));
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 30px;
           padding: 28px;
           box-shadow: 0 22px 70px rgba(0,0,0,0.22);
+        }
+
+        .priorityCard {
+          border-color: rgba(96,165,250,0.28);
+          box-shadow: 0 28px 90px rgba(37,99,235,0.18);
         }
 
         .featuredCard {
@@ -755,7 +755,6 @@ export default function LigasPage() {
           font-size: 16px;
           outline: none;
           font-family: inherit;
-          transition: 0.2s ease;
         }
 
         .leagueInput:focus {
@@ -786,83 +785,28 @@ export default function LigasPage() {
           font-family: inherit;
           font-size: 16px;
           box-shadow: 0 18px 40px rgba(37,99,235,0.24);
-          transition: 0.2s ease;
         }
 
-        .primaryButton:hover:not(:disabled) {
-          transform: translateY(-1px);
-          filter: brightness(1.08);
+        .secondaryButton {
+          background: rgba(37,99,235,0.18);
+          border: 1px solid rgba(96,165,250,0.22);
+          box-shadow: none;
         }
 
-        .primaryButton:disabled {
+        .primaryButton:disabled,
+        .retryButton:disabled {
           opacity: 0.62;
           cursor: not-allowed;
-        }
-
-        .myLeagues {
-          margin-bottom: 46px;
-        }
-
-        .sectionHeader {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-          margin-bottom: 22px;
-        }
-
-        .sectionTitle {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .sectionTitle h2 {
-          font-size: clamp(30px, 4vw, 40px);
-          font-weight: 950;
-          margin: 0;
-          letter-spacing: -0.03em;
-        }
-
-        .countPill {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          padding: 9px 13px;
-          color: #bfdbfe;
-          background: rgba(37,99,235,0.13);
-          border: 1px solid rgba(96,165,250,0.22);
-          font-weight: 900;
-          font-size: 13px;
-        }
-
-        .emptyBox {
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 28px;
-          padding: 34px 24px;
-          text-align: center;
-          color: #94a3b8;
-        }
-
-        .emptyBox h3 {
-          margin: 12px 0 8px;
-          color: white;
-          font-size: 24px;
-          font-weight: 950;
-        }
-
-        .emptyBox p {
-          margin: 0;
-          line-height: 1.55;
-          font-weight: 750;
         }
 
         .leaguesGrid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
           gap: 20px;
+        }
+
+        .priorityGrid {
+          grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
         }
 
         .leagueCard {
@@ -880,7 +824,7 @@ export default function LigasPage() {
 
         .leagueCardTop,
         .leagueBottom,
-        .ligaDetailButton,
+        .mainLeagueButton,
         .pendingInfo {
           position: relative;
           z-index: 1;
@@ -893,7 +837,8 @@ export default function LigasPage() {
           gap: 14px;
         }
 
-        .leagueLabel {
+        .leagueLabel,
+        .leagueCodeLabel {
           color: #94a3b8;
           font-size: 12px;
           text-transform: uppercase;
@@ -903,7 +848,7 @@ export default function LigasPage() {
         }
 
         .leagueCard h3 {
-          font-size: 28px;
+          font-size: 31px;
           line-height: 1.15;
           font-weight: 950;
           margin: 8px 0 0;
@@ -948,15 +893,6 @@ export default function LigasPage() {
           gap: 16px;
         }
 
-        .leagueCodeLabel {
-          color: #94a3b8;
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          font-weight: 950;
-          margin: 0;
-        }
-
         .leagueCode {
           font-size: 23px;
           font-weight: 950;
@@ -976,12 +912,21 @@ export default function LigasPage() {
           color: #bfdbfe;
           cursor: pointer;
           flex-shrink: 0;
-          transition: 0.2s ease;
         }
 
-        .copyButton:hover {
-          transform: translateY(-1px);
-          background: rgba(37,99,235,0.28);
+        .mainLeagueButton {
+          margin-top: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+          padding: 16px 18px;
+          border-radius: 18px;
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          color: white;
+          font-weight: 950;
+          text-decoration: none;
+          box-shadow: 0 18px 42px rgba(37,99,235,0.28);
         }
 
         .pendingInfo {
@@ -989,27 +934,6 @@ export default function LigasPage() {
           font-weight: 800;
           line-height: 1.55;
           margin-top: 24px;
-        }
-
-        .ligaDetailButton {
-          margin-top: 24px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 14px 18px;
-          border-radius: 18px;
-          background: rgba(37,99,235,0.18);
-          border: 1px solid rgba(37,99,235,0.32);
-          color: #bfdbfe;
-          font-weight: 950;
-          text-decoration: none;
-          transition: 0.2s ease;
-        }
-
-        .ligaDetailButton:hover {
-          background: rgba(37,99,235,0.30);
-          transform: translateY(-1px);
         }
 
         @media (max-width: 860px) {
