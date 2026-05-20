@@ -4,14 +4,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  CalendarDays,
-  Clock,
-  CheckCircle2,
-  Target,
-  MapPin,
-  Filter,
+  AlertTriangle,
   ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Filter,
+  Loader2,
+  MapPin,
+  RefreshCw,
   Search,
+  Target,
 } from "lucide-react";
 
 import PhaseBadge from "@/components/PhaseBadge";
@@ -40,6 +43,11 @@ type Filtro =
   | "Finalizados"
   | "Pendientes";
 
+type QueryResult<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
+
 const filtros: Filtro[] = [
   "Todos",
   "Fase de grupos",
@@ -48,11 +56,26 @@ const filtros: Filtro[] = [
   "Pendientes",
 ];
 
+function queryTimeout<T>(ms = 12000): Promise<QueryResult<T>> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        data: null,
+        error: {
+          message:
+            "La carga está tardando demasiado. Revisa tu conexión y vuelve a intentarlo.",
+        },
+      });
+    }, ms);
+  });
+}
+
 export default function PartidosPage() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [filtroActivo, setFiltroActivo] = useState<Filtro>("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
   useEffect(() => {
     cargarPartidos();
@@ -60,32 +83,52 @@ export default function PartidosPage() {
 
   async function cargarPartidos() {
     setCargando(true);
+    setErrorCarga(null);
 
     try {
-      const { data, error } = await supabase
-        .from("partidos")
-        .select("*")
-        .order("fecha_inicio", { ascending: true, nullsFirst: false });
+      const response = (await Promise.race([
+        supabase
+          .from("partidos")
+          .select(
+            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase, resultado_local, resultado_visitante"
+          )
+          .order("fecha_inicio", { ascending: true, nullsFirst: false }),
+        queryTimeout<Partido[]>(),
+      ])) as QueryResult<Partido[]>;
 
-      if (error) {
-        console.error(error);
+      if (response.error) {
+        console.error("Error cargando partidos:", response.error.message);
+        setErrorCarga(response.error.message);
         setPartidos([]);
         return;
       }
 
-      setPartidos(data ?? []);
+      setPartidos(response.data ?? []);
     } catch (error) {
-      console.error(error);
+      console.error("Error inesperado cargando partidos:", error);
+      setErrorCarga("No se pudieron cargar los partidos. Inténtalo de nuevo.");
       setPartidos([]);
     } finally {
       setCargando(false);
     }
   }
 
-  function formatearFecha(fechaInicio: string | null) {
-    if (!fechaInicio) return "Fecha pendiente";
+  function fechaValida(fechaInicio: string | null) {
+    if (!fechaInicio) return null;
 
-    return new Date(fechaInicio).toLocaleDateString("es-ES", {
+    const fecha = new Date(fechaInicio);
+
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return fecha;
+  }
+
+  function formatearFecha(fechaInicio: string | null) {
+    const fecha = fechaValida(fechaInicio);
+
+    if (!fecha) return "Fecha pendiente";
+
+    return fecha.toLocaleDateString("es-ES", {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -93,24 +136,35 @@ export default function PartidosPage() {
   }
 
   function formatearHora(fechaInicio: string | null) {
-    if (!fechaInicio) return "--:--";
+    const fecha = fechaValida(fechaInicio);
 
-    return new Date(fechaInicio).toLocaleTimeString("es-ES", {
+    if (!fecha) return "--:--";
+
+    return fecha.toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
     });
   }
 
   function fechaCorta(fechaInicio: string | null) {
-    if (!fechaInicio) return "Pend.";
+    const fecha = fechaValida(fechaInicio);
 
-    return new Date(fechaInicio)
+    if (!fecha) return "Pend.";
+
+    return fecha
       .toLocaleDateString("es-ES", {
         day: "numeric",
         month: "short",
       })
       .replace(".", "")
       .toUpperCase();
+  }
+
+  function normalizarTexto(texto: string) {
+    return texto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
   }
 
   function scrollToFecha(fecha: string) {
@@ -149,54 +203,54 @@ export default function PartidosPage() {
     }
   }
 
-  const partidosFiltrados = partidos.filter((partido) => {
-    const finalizado =
-      partido.resultado_local !== null &&
-      partido.resultado_visitante !== null;
+  const partidosFiltrados = useMemo(() => {
+    const textoBusqueda = normalizarTexto(busqueda.trim());
 
-    const textoBusqueda = busqueda.trim().toLowerCase();
+    return partidos.filter((partido) => {
+      const finalizado =
+        partido.resultado_local !== null &&
+        partido.resultado_visitante !== null;
 
-    const coincideBusqueda =
-      textoBusqueda === "" ||
-      partido.local.toLowerCase().includes(textoBusqueda) ||
-      partido.visitante.toLowerCase().includes(textoBusqueda) ||
-      (partido.estadio ?? "").toLowerCase().includes(textoBusqueda) ||
-      (partido.ciudad ?? "").toLowerCase().includes(textoBusqueda) ||
-      (partido.fase ?? "").toLowerCase().includes(textoBusqueda);
+      const coincideBusqueda =
+        textoBusqueda === "" ||
+        normalizarTexto(partido.local).includes(textoBusqueda) ||
+        normalizarTexto(partido.visitante).includes(textoBusqueda) ||
+        normalizarTexto(partido.estadio ?? "").includes(textoBusqueda) ||
+        normalizarTexto(partido.ciudad ?? "").includes(textoBusqueda) ||
+        normalizarTexto(partido.fase ?? "").includes(textoBusqueda) ||
+        normalizarTexto(partido.grupo ?? "").includes(textoBusqueda);
 
-    if (!coincideBusqueda) return false;
+      if (!coincideBusqueda) return false;
 
-    if (filtroActivo === "Todos") return true;
+      if (filtroActivo === "Todos") return true;
 
-    if (filtroActivo === "Fase de grupos") {
-      return partido.fase === "Fase de grupos";
-    }
+      if (filtroActivo === "Fase de grupos") {
+        return partido.fase === "Fase de grupos";
+      }
 
-    if (filtroActivo === "Eliminatorias") {
-      return partido.fase !== "Fase de grupos";
-    }
+      if (filtroActivo === "Eliminatorias") {
+        return partido.fase !== "Fase de grupos";
+      }
 
-    if (filtroActivo === "Finalizados") return finalizado;
-    if (filtroActivo === "Pendientes") return !finalizado;
+      if (filtroActivo === "Finalizados") return finalizado;
+      if (filtroActivo === "Pendientes") return !finalizado;
 
-    return true;
-  });
+      return true;
+    });
+  }, [partidos, busqueda, filtroActivo]);
 
   const partidosPorFecha = useMemo(() => {
-    return partidosFiltrados.reduce<Record<string, Partido[]>>(
-      (acc, partido) => {
-        const fecha = formatearFecha(partido.fecha_inicio);
+    return partidosFiltrados.reduce<Record<string, Partido[]>>((acc, partido) => {
+      const fecha = formatearFecha(partido.fecha_inicio);
 
-        if (!acc[fecha]) {
-          acc[fecha] = [];
-        }
+      if (!acc[fecha]) {
+        acc[fecha] = [];
+      }
 
-        acc[fecha].push(partido);
+      acc[fecha].push(partido);
 
-        return acc;
-      },
-      {}
-    );
+      return acc;
+    }, {});
   }, [partidosFiltrados]);
 
   const fechas = Object.entries(partidosPorFecha);
@@ -222,541 +276,631 @@ export default function PartidosPage() {
             <input
               type="text"
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(event) => setBusqueda(event.target.value)}
               placeholder="Buscar selección, fase, estadio o ciudad..."
             />
           </div>
 
-          <div className="filtersRow">
+          <div className="filterButtons">
             {filtros.map((filtro) => (
               <button
                 key={filtro}
+                type="button"
+                className={filtroActivo === filtro ? "filterActive" : ""}
                 onClick={() => setFiltroActivo(filtro)}
-                className={`filterButton ${
-                  filtroActivo === filtro ? "activeFilter" : ""
-                }`}
               >
-                <Filter size={14} />
+                <Filter size={15} />
                 {filtro}
-              </button>
-            ))}
-          </div>
-
-          <div className="datesNav">
-            {fechas.map(([fecha, partidosFecha]) => (
-              <button
-                key={fecha}
-                className="dateNavButton"
-                onClick={() => scrollToFecha(fecha)}
-              >
-                {fechaCorta(partidosFecha[0]?.fecha_inicio ?? null)}
               </button>
             ))}
           </div>
         </div>
 
+        {errorCarga && (
+          <div className="errorBox">
+            <div>
+              <AlertTriangle size={20} />
+            </div>
+
+            <div>
+              <strong>No se han podido cargar los partidos</strong>
+              <p>{errorCarga}</p>
+            </div>
+
+            <button type="button" onClick={cargarPartidos}>
+              <RefreshCw size={17} />
+              Reintentar
+            </button>
+          </div>
+        )}
+
         {cargando ? (
-          <div className="emptyState">Cargando partidos...</div>
+          <div className="loadingBox">
+            <Loader2 size={26} className="spin" />
+            Cargando partidos...
+          </div>
         ) : (
-          <div className="daysWrapper">
-            {Object.entries(partidosPorFecha).map(([fecha, partidosFecha]) => (
-              <section
-                key={fecha}
-                id={`fecha-${fecha}`}
-                className="daySection"
-              >
-                <div className="dayHeader">
-                  <CalendarDays size={18} />
-                  <h2>{fecha}</h2>
+          <>
+            {!errorCarga && partidos.length > 0 && (
+              <>
+                <div className="dateNav">
+                  {fechas.map(([fecha, partidosFecha]) => (
+                    <button
+                      key={fecha}
+                      type="button"
+                      onClick={() => scrollToFecha(fecha)}
+                    >
+                      <CalendarDays size={15} />
+                      <span>{fechaCorta(partidosFecha[0]?.fecha_inicio)}</span>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="cards">
-                  {partidosFecha.map((partido) => {
-                    const finalizado =
-                      partido.resultado_local !== null &&
-                      partido.resultado_visitante !== null;
+                <div className="resultsInfo">
+                  Mostrando {partidosFiltrados.length} de {partidos.length} partidos
+                </div>
+              </>
+            )}
 
-                    const claseFase = obtenerClaseFase(partido.fase);
+            {!errorCarga && fechas.length === 0 && (
+              <div className="emptyBox">
+                No hay partidos que coincidan con tu búsqueda o filtros.
+              </div>
+            )}
 
-                    return (
-                      <article
-                        key={partido.id}
-                        className={`card ${claseFase}`}
-                      >
-                        <div className="cardTop">
-                          <div className="leftTop">
-                            <div className="timeRow">
-                              <Clock size={14} />
-                              {formatearHora(partido.fecha_inicio)}
+            <div className="datesList">
+              {fechas.map(([fecha, partidosFecha]) => (
+                <section key={fecha} id={`fecha-${fecha}`} className="dateSection">
+                  <h2>{fecha}</h2>
+
+                  <div className="cards">
+                    {partidosFecha.map((partido) => {
+                      const finalizado =
+                        partido.resultado_local !== null &&
+                        partido.resultado_visitante !== null;
+
+                      return (
+                        <article
+                          key={partido.id}
+                          className={`card ${obtenerClaseFase(partido.fase)}`}
+                        >
+                          <div className="topRow">
+                            <div className="topLeft">
+                              <PhaseBadge fase={partido.fase} />
+
+                              {partido.grupo && (
+                                <div className="grupoBadge">{partido.grupo}</div>
+                              )}
                             </div>
 
-                            <PhaseBadge fase={partido.fase} />
-                          </div>
-
-                          <div
-                            className={`statusBadge ${
-                              finalizado ? "finished" : "pending"
-                            }`}
-                          >
                             {finalizado ? (
-                              <CheckCircle2 size={14} />
+                              <div className="status finished">
+                                <CheckCircle2 size={15} />
+                                Finalizado
+                              </div>
                             ) : (
-                              <Clock size={14} />
+                              <div className="status pending">
+                                <Clock size={15} />
+                                Pendiente
+                              </div>
                             )}
-
-                            {finalizado ? "Finalizado" : "Pendiente"}
-                          </div>
-                        </div>
-
-                        <div className="matchCompact">
-                          <Team
-                            code={partido.local_code}
-                            name={partido.local}
-                          />
-
-                          <div className="scoreCompact">
-                            {finalizado
-                              ? `${partido.resultado_local} - ${partido.resultado_visitante}`
-                              : "VS"}
                           </div>
 
-                          <Team
-                            code={partido.visitante_code}
-                            name={partido.visitante}
-                            right
-                          />
-                        </div>
-
-                        <div className="bottomCompact">
-                          <div className="stadiumCompact">
-                            <MapPin size={14} />
-                            {partido.estadio ?? "Estadio pendiente"}
-                            {partido.ciudad ? ` · ${partido.ciudad}` : ""}
+                          <div className="timeRow">
+                            <Clock size={16} />
+                            {formatearHora(partido.fecha_inicio)}
                           </div>
 
-                          <div className="buttonsCompact">
-                            <Link
-                              href={`/partidos/${partido.id}`}
-                              className="detailsButton"
-                            >
-                              Detalle
-                              <ArrowRight size={15} />
+                          <div className="matchRow">
+                            <Team code={partido.local_code} name={partido.local} />
+
+                            <div className="centerScore">
+                              {finalizado ? (
+                                <strong>
+                                  {partido.resultado_local} -{" "}
+                                  {partido.resultado_visitante}
+                                </strong>
+                              ) : (
+                                <span>VS</span>
+                              )}
+                            </div>
+
+                            <Team
+                              code={partido.visitante_code}
+                              name={partido.visitante}
+                              alignRight
+                            />
+                          </div>
+
+                          <div className="metaRow">
+                            <span>
+                              <MapPin size={14} />
+                              {partido.estadio ?? "Estadio pendiente"}
+                              {partido.ciudad ? ` · ${partido.ciudad}` : ""}
+                            </span>
+                          </div>
+
+                          <div className="bottomRow">
+                            <Link href={`/partidos/${partido.id}`} className="detailButton">
+                              Ver detalle
+                              <ArrowRight size={17} />
                             </Link>
 
-                            <Link
-                              href="/mis-pronosticos"
-                              className="predictButton"
-                            >
-                              <Target size={15} />
+                            <Link href="/mis-pronosticos" className="pronosticoButton">
+                              <Target size={17} />
                               Pronosticar
                             </Link>
                           </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
       <style>{`
         .partidosPage {
           min-height: 100vh;
-          background: linear-gradient(180deg, #020617 0%, #111827 100%);
-          color: white;
           padding: 28px 16px 120px;
+          color: white;
         }
 
         .container {
-          max-width: 1180px;
+          max-width: 1120px;
           margin: 0 auto;
         }
 
         .header {
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 16px;
           margin-bottom: 22px;
         }
 
         .headerIcon {
-          width: 58px;
-          height: 58px;
-          border-radius: 18px;
+          width: 64px;
+          height: 64px;
+          border-radius: 22px;
           background: #2563eb;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 0 32px rgba(37,99,235,0.42);
+          flex-shrink: 0;
         }
 
         .header h1 {
-          font-size: 42px;
+          font-size: 40px;
+          font-weight: 950;
           margin: 0;
-          font-weight: 900;
         }
 
         .header p {
-          margin: 4px 0 0;
           color: #94a3b8;
+          margin-top: 6px;
+          font-weight: 700;
         }
 
         .filtersWrapper {
-          position: sticky;
-          top: 74px;
-          z-index: 30;
-          background: rgba(15,23,42,0.86);
-          backdrop-filter: blur(18px);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 22px;
-          padding: 16px;
-          margin-bottom: 26px;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 12px;
+          margin-bottom: 14px;
         }
 
         .searchBox {
           display: flex;
           align-items: center;
           gap: 10px;
-          background: rgba(2,6,23,0.72);
+          background: rgba(15,23,42,0.72);
           border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 16px;
-          padding: 12px 14px;
-          margin-bottom: 14px;
+          border-radius: 18px;
+          padding: 0 14px;
+          color: #94a3b8;
         }
 
         .searchBox input {
-          flex: 1;
+          width: 100%;
+          height: 48px;
           background: transparent;
           border: none;
           outline: none;
           color: white;
-          font-size: 15px;
-          font-weight: 700;
+          font-weight: 800;
         }
 
-        .searchBox input::placeholder {
-          color: #94a3b8;
-        }
-
-        .filtersRow {
+        .filterButtons {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          margin-bottom: 14px;
         }
 
-        .filterButton {
+        .filterButtons button {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          border: none;
-          cursor: pointer;
+          gap: 7px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(15,23,42,0.72);
+          color: #cbd5e1;
           border-radius: 999px;
           padding: 10px 14px;
-          font-weight: 800;
-          background: rgba(255,255,255,0.06);
-          color: #cbd5e1;
-          font-family: inherit;
+          font-weight: 900;
+          cursor: pointer;
+          white-space: nowrap;
         }
 
-        .activeFilter {
-          background: #2563eb;
+        .filterButtons button:hover,
+        .filterButtons .filterActive {
+          background: rgba(37,99,235,0.22);
+          border-color: rgba(37,99,235,0.45);
+          color: #bfdbfe;
+        }
+
+        .errorBox {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          align-items: center;
+          gap: 14px;
+          background: rgba(239,68,68,0.12);
+          border: 1px solid rgba(239,68,68,0.28);
+          color: #fecaca;
+          border-radius: 20px;
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+
+        .errorBox strong {
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .errorBox p {
+          margin: 0;
+          color: #fecaca;
+          font-size: 14px;
+        }
+
+        .errorBox button {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border: none;
+          border-radius: 14px;
+          padding: 11px 14px;
+          background: #dc2626;
           color: white;
-          box-shadow: 0 0 22px rgba(37,99,235,0.38);
+          font-weight: 900;
+          cursor: pointer;
         }
 
-        .datesNav {
+        .loadingBox,
+        .emptyBox {
           display: flex;
+          align-items: center;
+          justify-content: center;
           gap: 10px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 24px;
+          padding: 32px;
+          text-align: center;
+          color: #94a3b8;
+          font-weight: 900;
+        }
+
+        .spin {
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .dateNav {
+          display: flex;
+          gap: 8px;
           overflow-x: auto;
+          padding-bottom: 8px;
+          margin-bottom: 8px;
           scrollbar-width: none;
         }
 
-        .datesNav::-webkit-scrollbar {
+        .dateNav::-webkit-scrollbar {
           display: none;
         }
 
-        .dateNavButton {
-          flex-shrink: 0;
-          border: none;
-          cursor: pointer;
-          border-radius: 999px;
-          padding: 10px 14px;
-          font-weight: 900;
-          background: rgba(37,99,235,0.18);
-          color: #bfdbfe;
-          font-family: inherit;
-        }
-
-        .daysWrapper {
-          display: grid;
-          gap: 30px;
-        }
-
-        .daySection {
-          scroll-margin-top: 180px;
-        }
-
-        .dayHeader {
-          display: flex;
+        .dateNav button {
+          flex: 0 0 auto;
+          display: inline-flex;
           align-items: center;
-          gap: 10px;
-          margin-bottom: 14px;
+          gap: 7px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(15,23,42,0.72);
+          color: #cbd5e1;
+          border-radius: 999px;
+          padding: 10px 13px;
+          font-weight: 900;
+          cursor: pointer;
         }
 
-        .dayHeader h2 {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 900;
+        .resultsInfo {
+          color: #94a3b8;
+          font-size: 13px;
+          font-weight: 800;
+          margin: 0 0 16px;
+        }
+
+        .datesList {
+          display: grid;
+          gap: 28px;
+        }
+
+        .dateSection {
+          scroll-margin-top: 90px;
+        }
+
+        .dateSection h2 {
+          font-size: 28px;
+          font-weight: 950;
+          margin: 0 0 14px;
           text-transform: capitalize;
         }
 
         .cards {
           display: grid;
-          gap: 12px;
+          gap: 14px;
         }
 
         .card {
           background: linear-gradient(
             145deg,
-            rgba(15,23,42,0.96),
-            rgba(15,23,42,0.74)
+            rgba(15,23,42,0.98),
+            rgba(15,23,42,0.65)
           );
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 22px;
-          padding: 16px;
-          transition: 0.2s ease;
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 26px;
+          padding: 20px;
         }
 
-        .card:hover {
-          transform: translateY(-1px);
-          border-color: rgba(255,255,255,0.18);
+        .faseFinal {
+          border-color: rgba(250,204,21,0.42);
+          box-shadow: 0 0 28px rgba(250,204,21,0.12);
         }
 
-        .card.faseFinal {
-          border-color: rgba(250,204,21,0.58);
-          box-shadow: 0 0 36px rgba(250,204,21,0.16);
-          background: linear-gradient(
-            145deg,
-            rgba(120,53,15,0.36),
-            rgba(15,23,42,0.92)
-          );
+        .faseTercerPuesto {
+          border-color: rgba(251,146,60,0.34);
         }
 
-        .card.faseTercerPuesto {
-          border-color: rgba(251,146,60,0.38);
-          background: linear-gradient(
-            145deg,
-            rgba(124,45,18,0.28),
-            rgba(15,23,42,0.92)
-          );
+        .faseSemi {
+          border-color: rgba(217,70,239,0.34);
         }
 
-        .card.faseSemi {
-          border-color: rgba(248,113,113,0.34);
-          background: linear-gradient(
-            145deg,
-            rgba(127,29,29,0.24),
-            rgba(15,23,42,0.92)
-          );
+        .faseCuartos {
+          border-color: rgba(139,92,246,0.30);
         }
 
-        .card.faseCuartos {
-          border-color: rgba(251,146,60,0.30);
+        .faseOctavos {
+          border-color: rgba(59,130,246,0.30);
         }
 
-        .card.faseOctavos {
-          border-color: rgba(250,204,21,0.26);
+        .faseDieciseisavos {
+          border-color: rgba(6,182,212,0.30);
         }
 
-        .card.faseDieciseisavos {
-          border-color: rgba(168,85,247,0.28);
-        }
-
-        .cardTop {
+        .topRow {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 10px;
-          margin-bottom: 14px;
+          gap: 12px;
+          margin-bottom: 12px;
         }
 
-        .leftTop {
+        .topLeft {
           display: flex;
-          align-items: center;
-          gap: 10px;
           flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .grupoBadge,
+        .status {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-weight: 900;
+          font-size: 13px;
+        }
+
+        .grupoBadge {
+          background: rgba(255,255,255,0.08);
+          color: #cbd5e1;
+        }
+
+        .status.pending {
+          background: rgba(37,99,235,0.18);
+          color: #93c5fd;
+        }
+
+        .status.finished {
+          background: rgba(22,163,74,0.16);
+          color: #86efac;
         }
 
         .timeRow {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           color: #cbd5e1;
-          font-size: 14px;
-          font-weight: 800;
-        }
-
-        .statusBadge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
+          background: rgba(255,255,255,0.07);
           border-radius: 999px;
           padding: 8px 12px;
-          font-size: 12px;
           font-weight: 900;
-          white-space: nowrap;
+          margin-bottom: 18px;
         }
 
-        .statusBadge.pending {
-          background: rgba(37,99,235,0.18);
-          color: #93c5fd;
-        }
-
-        .statusBadge.finished {
-          background: rgba(22,163,74,0.18);
-          color: #86efac;
-        }
-
-        .matchCompact {
+        .matchRow {
           display: grid;
           grid-template-columns: 1fr auto 1fr;
           align-items: center;
-          gap: 14px;
-          margin-bottom: 14px;
+          gap: 18px;
         }
 
         .team {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           min-width: 0;
         }
 
-        .team.right {
+        .teamRight {
           justify-content: flex-end;
+          text-align: right;
         }
 
-        .teamName {
-          font-size: 18px;
-          font-weight: 900;
+        .team span {
+          font-size: 20px;
+          font-weight: 950;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
         }
 
-        .scoreCompact {
-          min-width: 84px;
+        .centerScore {
+          min-width: 80px;
           text-align: center;
-          font-size: 26px;
-          font-weight: 900;
         }
 
-        .bottomCompact {
-          display: flex;
-          justify-content: space-between;
+        .centerScore span,
+        .centerScore strong {
+          display: inline-flex;
           align-items: center;
-          gap: 14px;
-          flex-wrap: wrap;
+          justify-content: center;
+          min-width: 66px;
+          border-radius: 999px;
+          background: rgba(37,99,235,0.14);
+          border: 1px solid rgba(37,99,235,0.25);
+          color: #93c5fd;
+          padding: 8px 14px;
+          font-weight: 950;
         }
 
-        .stadiumCompact {
-          display: flex;
-          align-items: center;
-          gap: 6px;
+        .centerScore strong {
+          color: white;
+          font-size: 22px;
+        }
+
+        .metaRow {
+          margin-top: 16px;
           color: #94a3b8;
           font-size: 14px;
         }
 
-        .buttonsCompact {
-          display: flex;
-          gap: 10px;
-        }
-
-        .detailsButton,
-        .predictButton {
+        .metaRow span {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          border-radius: 14px;
-          padding: 10px 14px;
+        }
+
+        .bottomRow {
+          margin-top: 16px;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .detailButton,
+        .pronosticoButton {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
           text-decoration: none;
-          font-weight: 900;
-          font-size: 14px;
+          border-radius: 15px;
+          padding: 12px 14px;
+          font-weight: 950;
         }
 
-        .detailsButton {
-          background: rgba(255,255,255,0.08);
-          color: white;
-        }
-
-        .predictButton {
-          background: rgba(37,99,235,0.20);
+        .detailButton {
           color: #bfdbfe;
+          background: rgba(37,99,235,0.16);
+          border: 1px solid rgba(96,165,250,0.26);
         }
 
-        .emptyState {
-          padding: 30px;
-          text-align: center;
-          border-radius: 20px;
-          background: rgba(255,255,255,0.05);
-          color: #94a3b8;
+        .pronosticoButton {
+          color: white;
+          background: #2563eb;
         }
 
-        @media (max-width: 768px) {
-          .matchCompact {
-            grid-template-columns: 1fr;
-            text-align: center;
+        @media (max-width: 760px) {
+          .partidosPage {
+            padding: 22px 12px 120px;
           }
 
-          .team,
-          .team.right {
-            justify-content: center;
-          }
-
-          .bottomCompact {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .buttonsCompact {
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .detailsButton,
-          .predictButton {
-            justify-content: center;
-          }
-
-          .teamName {
-            white-space: normal;
-          }
-
-          .cardTop {
-            align-items: flex-start;
-          }
-        }
-
-        @media (max-width: 640px) {
           .header h1 {
             font-size: 34px;
           }
 
           .filtersWrapper {
-            top: 10px;
+            gap: 8px;
           }
 
-          .buttonsCompact {
+          .searchBox input {
+            height: 42px;
+            font-size: 14px;
+          }
+
+          .filterButtons {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+          }
+
+          .filterButtons::-webkit-scrollbar {
+            display: none;
+          }
+
+          .filterButtons button {
+            flex: 0 0 auto;
+            padding: 9px 12px;
+            font-size: 13px;
+          }
+
+          .errorBox {
             grid-template-columns: 1fr;
           }
 
-          .statusBadge {
-            display: none;
+          .errorBox button {
+            justify-content: center;
+          }
+
+          .dateSection h2 {
+            font-size: 24px;
+          }
+
+          .matchRow {
+            grid-template-columns: 1fr;
+            text-align: center;
+          }
+
+          .team,
+          .teamRight {
+            justify-content: center;
+            text-align: center;
+          }
+
+          .bottomRow {
+            flex-direction: column;
+          }
+
+          .detailButton,
+          .pronosticoButton {
+            width: 100%;
           }
         }
       `}</style>
@@ -767,16 +911,16 @@ export default function PartidosPage() {
 function Team({
   code,
   name,
-  right = false,
+  alignRight = false,
 }: {
   code: string | null;
   name: string;
-  right?: boolean;
+  alignRight?: boolean;
 }) {
   return (
-    <div className={`team ${right ? "right" : ""}`}>
-      <TeamFlag code={code} name={name} size="lg" />
-      <span className="teamName">{name}</span>
+    <div className={`team ${alignRight ? "teamRight" : ""}`}>
+      <TeamFlag code={code} name={name} size="md" />
+      <span>{name}</span>
     </div>
   );
 }
