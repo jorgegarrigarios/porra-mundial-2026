@@ -61,7 +61,7 @@ const links = [
 ];
 
 async function conTimeout<T>(
-  promesa: Promise<T>,
+  operacion: PromiseLike<T>,
   ms: number,
   mensaje = "La operación ha tardado demasiado."
 ): Promise<T> {
@@ -74,7 +74,7 @@ async function conTimeout<T>(
   });
 
   try {
-    return await Promise.race([promesa, timeout]);
+    return await Promise.race([Promise.resolve(operacion), timeout]);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -84,14 +84,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const [haySesion, setHaySesion] = useState(false);
   const [nombreVisible, setNombreVisible] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const estaLogado = !!nombreVisible;
-
   const visibleLinks = useMemo(() => {
-    return links.filter((link) => link.public || estaLogado);
-  }, [estaLogado]);
+    return links.filter((link) => link.public || haySesion);
+  }, [haySesion]);
 
   useEffect(() => {
     let mounted = true;
@@ -111,13 +110,13 @@ export default function Navbar() {
         const user = session?.user;
 
         if (!user) {
+          setHaySesion(false);
           setNombreVisible(null);
           setIsAdmin(false);
           return;
         }
 
-        setNombreVisible(user.email || "Usuario");
-        setIsAdmin(false);
+        setHaySesion(true);
 
         const participante = await conTimeout(
           obtenerParticipanteActual(),
@@ -136,6 +135,18 @@ export default function Navbar() {
 
         if (!mounted) return;
 
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          setHaySesion(true);
+          setNombreVisible(session.user.email || "Usuario");
+        } else {
+          setHaySesion(false);
+          setNombreVisible(null);
+        }
+
         setIsAdmin(false);
       }
     }
@@ -150,13 +161,13 @@ export default function Navbar() {
       const user = session?.user;
 
       if (!user) {
+        setHaySesion(false);
         setNombreVisible(null);
         setIsAdmin(false);
         return;
       }
 
-      setNombreVisible(user.email || "Usuario");
-      setIsAdmin(false);
+      setHaySesion(true);
 
       try {
         const participante = await conTimeout(
@@ -190,6 +201,7 @@ export default function Navbar() {
   async function cerrarSesion() {
     try {
       await supabase.auth.signOut();
+      setHaySesion(false);
       setNombreVisible(null);
       setIsAdmin(false);
     } finally {
@@ -234,7 +246,7 @@ export default function Navbar() {
           </div>
 
           <div className="rightSide">
-            {nombreVisible && (
+            {haySesion && nombreVisible && (
               <div className="userBadge" title={nombreVisible}>
                 {nombreVisible}
               </div>
@@ -252,7 +264,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {nombreVisible ? (
+            {haySesion ? (
               <button onClick={cerrarSesion} className="authButton logout">
                 <LogOut size={17} />
                 Salir
@@ -270,7 +282,7 @@ export default function Navbar() {
       <nav
         className="mobileNav"
         style={{
-          gridTemplateColumns: `repeat(${visibleLinks.length}, 1fr)`,
+          gridTemplateColumns: `repeat(${visibleLinks.length}, minmax(0, 1fr))`,
         }}
       >
         {visibleLinks.map((link) => {
@@ -283,7 +295,7 @@ export default function Navbar() {
               href={link.href}
               className={`mobileLink ${active ? "activeMobileLink" : ""}`}
             >
-              <Icon size={22} />
+              <Icon size={21} />
               <span>{link.label}</span>
             </Link>
           );
@@ -291,7 +303,7 @@ export default function Navbar() {
       </nav>
 
       <div className="mobileTopActions">
-        {nombreVisible && (
+        {haySesion && nombreVisible && (
           <div className="mobileUserBadge" title={nombreVisible}>
             {nombreVisible}
           </div>
@@ -304,19 +316,19 @@ export default function Navbar() {
               pathname.startsWith("/admin") ? "activeMobileTopButton" : ""
             }`}
           >
-            <Shield size={18} />
+            <Shield size={17} />
             Admin
           </Link>
         )}
 
-        {nombreVisible ? (
+        {haySesion ? (
           <button onClick={cerrarSesion} className="mobileTopButton">
-            <LogOut size={18} />
+            <LogOut size={17} />
             Salir
           </button>
         ) : (
           <Link href="/login" className="mobileTopButton">
-            <LogIn size={18} />
+            <LogIn size={17} />
             Login
           </Link>
         )}
@@ -327,57 +339,69 @@ export default function Navbar() {
           position: sticky;
           top: 0;
           z-index: 100;
-          background: rgba(2, 6, 23, 0.88);
+          height: 82px;
+          background: rgba(2, 6, 23, 0.92);
           backdrop-filter: blur(18px);
           border-bottom: 1px solid rgba(255,255,255,0.10);
+          display: flex;
+          align-items: center;
         }
 
         .navInner {
-          max-width: 1360px;
+          width: 100%;
+          max-width: 1480px;
           margin: 0 auto;
-          padding: 14px 24px;
-          display: flex;
+          padding: 0 24px;
+          display: grid;
+          grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
           align-items: center;
-          justify-content: space-between;
-          gap: 36px;
+          gap: 22px;
         }
 
         .brand {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           color: white;
           text-decoration: none;
-          font-size: 22px;
-          font-weight: 900;
+          font-size: 25px;
+          font-weight: 950;
           white-space: nowrap;
+          min-width: 0;
         }
 
         .brandLogo {
-          width: 34px;
-          height: 34px;
+          width: 38px;
+          height: 38px;
           object-fit: contain;
+          flex: 0 0 auto;
         }
 
         .navLinks {
           display: flex;
           align-items: center;
-          gap: 10px;
+          justify-content: center;
+          gap: 8px;
           font-size: 15px;
-          font-weight: 800;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.08);
-          padding: 6px;
+          font-weight: 900;
+          background: rgba(255,255,255,0.055);
+          border: 1px solid rgba(255,255,255,0.10);
+          padding: 7px;
           border-radius: 999px;
+          min-width: 0;
         }
 
         .navLink {
           color: #cbd5e1;
           text-decoration: none;
           transition: 0.2s ease;
-          padding: 10px 16px;
+          padding: 11px 18px;
           border-radius: 999px;
           white-space: nowrap;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .navLink:hover {
@@ -394,12 +418,14 @@ export default function Navbar() {
         .rightSide {
           display: flex;
           align-items: center;
-          gap: 14px;
-          margin-left: 12px;
+          justify-content: flex-end;
+          gap: 12px;
+          min-width: 0;
         }
 
         .userBadge {
-          max-width: 150px;
+          max-width: 180px;
+          min-width: 92px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -408,16 +434,19 @@ export default function Navbar() {
           border: 1px solid rgba(96,165,250,0.28);
           border-radius: 999px;
           padding: 0 16px;
-          height: 52px;
+          height: 46px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-weight: 900;
           font-size: 14px;
+          line-height: 1;
+          box-sizing: border-box;
         }
 
         .authButton,
         .adminButton {
+          height: 46px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -428,12 +457,12 @@ export default function Navbar() {
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 999px;
           padding: 0 18px;
-          height: 52px;
           font-weight: 900;
           cursor: pointer;
           white-space: nowrap;
           font-family: inherit;
           font-size: 15px;
+          line-height: 1;
           box-sizing: border-box;
         }
 
@@ -454,13 +483,21 @@ export default function Navbar() {
           border: 1px solid rgba(239,68,68,0.28);
         }
 
+        .authButton.logout:hover,
+        .authButton:hover,
+        .adminButton:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.08);
+        }
+
         .mobileNav,
         .mobileTopActions {
           display: none;
         }
 
-        @media (max-width: 1080px) {
+        @media (max-width: 1220px) {
           .navInner {
+            grid-template-columns: auto 1fr auto;
             gap: 14px;
           }
 
@@ -469,7 +506,7 @@ export default function Navbar() {
           }
 
           .navLinks {
-            gap: 6px;
+            justify-content: flex-start;
             overflow-x: auto;
             scrollbar-width: none;
           }
@@ -479,12 +516,17 @@ export default function Navbar() {
           }
 
           .navLink {
-            padding: 10px 12px;
+            padding: 11px 14px;
             font-size: 14px;
           }
 
           .userBadge {
-            max-width: 110px;
+            max-width: 130px;
+          }
+
+          .authButton,
+          .adminButton {
+            padding: 0 15px;
           }
         }
 
@@ -501,7 +543,7 @@ export default function Navbar() {
             z-index: 100;
             display: grid;
             gap: 6px;
-            padding: 10px;
+            padding: 9px;
             border-radius: 24px;
             background: rgba(2, 6, 23, 0.92);
             backdrop-filter: blur(18px);
@@ -518,11 +560,19 @@ export default function Navbar() {
             color: #cbd5e1;
             text-decoration: none;
             font-size: 10px;
-            font-weight: 800;
-            padding: 8px 4px;
+            font-weight: 850;
+            padding: 8px 3px;
             border-radius: 16px;
             transition: 0.2s ease;
-            min-height: 58px;
+            min-height: 56px;
+            min-width: 0;
+          }
+
+          .mobileLink span {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           .activeMobileLink {
@@ -538,31 +588,39 @@ export default function Navbar() {
             z-index: 101;
             display: flex;
             gap: 8px;
+            align-items: center;
           }
 
           .mobileUserBadge,
           .mobileTopButton {
+            min-height: 40px;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 7px;
             color: white;
             text-decoration: none;
             background: rgba(2,6,23,0.88);
             border: 1px solid rgba(255,255,255,0.14);
             border-radius: 999px;
-            padding: 10px 13px;
+            padding: 0 12px;
             font-weight: 900;
             backdrop-filter: blur(18px);
             font-family: inherit;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
+            line-height: 1;
+            box-sizing: border-box;
           }
 
           .mobileUserBadge {
-            max-width: 105px;
+            max-width: 110px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            color: #dbeafe;
+            background: rgba(37,99,235,0.16);
+            border-color: rgba(96,165,250,0.3);
           }
 
           .activeMobileTopButton {
@@ -570,7 +628,7 @@ export default function Navbar() {
           }
 
           body {
-            padding-bottom: 95px;
+            padding-bottom: 94px;
           }
         }
       `}</style>
