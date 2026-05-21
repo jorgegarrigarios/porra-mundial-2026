@@ -4,14 +4,22 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarDays,
+  CheckCircle2,
   Copy,
   Crown,
+  Flame,
   Medal,
+  RefreshCw,
   ScrollText,
+  Shield,
+  Sparkles,
   Table2,
   Target,
+  Trophy,
   Users,
+  Zap,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -27,6 +35,12 @@ type Liga = {
   codigo: string;
 };
 
+type UsuarioActual = {
+  id: number;
+  nombre: string | null;
+  nickname?: string | null;
+};
+
 type MiembroRanking = {
   id: number;
   nombre: string;
@@ -34,116 +48,79 @@ type MiembroRanking = {
   aciertos: number;
 };
 
+type LigaParticipanteRow = {
+  participante_id: number;
+  participantes:
+    | {
+        id: number;
+        nombre: string | null;
+        nickname: string | null;
+      }
+    | {
+        id: number;
+        nombre: string | null;
+        nickname: string | null;
+      }[]
+    | null;
+};
+
+type PronosticoRow = {
+  participante_id: number;
+  puntos: number | null;
+};
+
+async function conTimeout<T>(
+  operacion: PromiseLike<T>,
+  ms: number,
+  mensaje = "La operación ha tardado demasiado."
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(mensaje));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(operacion), timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function normalizarParticipante(
+  participante: LigaParticipanteRow["participantes"]
+) {
+  if (!participante) return null;
+  if (Array.isArray(participante)) return participante[0] ?? null;
+  return participante;
+}
+
 export default function LigaDetallePage({ params }: Props) {
   const resolvedParams = use(params);
 
   const [ligaId, setLigaId] = useState<number | null>(null);
   const [liga, setLiga] = useState<Liga | null>(null);
+  const [usuarioActual, setUsuarioActual] = useState<UsuarioActual | null>(null);
   const [ranking, setRanking] = useState<MiembroRanking[]>([]);
   const [cargando, setCargando] = useState(true);
   const [sinAcceso, setSinAcceso] = useState(false);
+  const [error, setError] = useState("");
+  const [codigoCopiado, setCodigoCopiado] = useState(false);
 
   useEffect(() => {
     const id = Number(resolvedParams.id);
 
+    if (!id || Number.isNaN(id)) {
+      setSinAcceso(true);
+      setCargando(false);
+      return;
+    }
+
     setLigaId(id);
     cargarLiga(id);
   }, [resolvedParams.id]);
-
-  async function cargarLiga(id: number) {
-    setCargando(true);
-    setSinAcceso(false);
-
-    try {
-      const usuario = await obtenerParticipanteActual();
-
-      if (!usuario) {
-        setSinAcceso(true);
-        setCargando(false);
-        return;
-      }
-
-      const { data: perteneceLiga } = await supabase
-        .from("liga_participantes")
-        .select("id")
-        .eq("liga_id", id)
-        .eq("participante_id", usuario.id)
-        .maybeSingle();
-
-      if (!perteneceLiga) {
-        setSinAcceso(true);
-        setCargando(false);
-        return;
-      }
-
-      const { data: ligaData } = await supabase
-        .from("ligas")
-        .select("id, nombre, codigo")
-        .eq("id", id)
-        .single();
-
-      setLiga(ligaData);
-
-      const { data: miembrosData } = await supabase
-        .from("liga_participantes")
-        .select(
-          `
-          participante_id,
-          participantes (
-            id,
-            nombre,
-            nickname
-          )
-        `
-        )
-        .eq("liga_id", id);
-
-      const miembros =
-        miembrosData?.map((item: any) => item.participantes).filter(Boolean) ??
-        [];
-
-      const { data: pronosticosData } = await supabase
-        .from("pronosticos")
-        .select("participante_id, puntos");
-
-      const rankingCalculado: MiembroRanking[] = miembros.map(
-        (miembro: any) => {
-          const nombreVisible =
-            miembro.nickname || miembro.nombre || "Usuario";
-
-          const pronosticosMiembro =
-            pronosticosData?.filter(
-              (p) => p.participante_id === miembro.id
-            ) ?? [];
-
-          const puntos = pronosticosMiembro.reduce(
-            (total, p) => total + (p.puntos ?? 0),
-            0
-          );
-
-          const aciertos = pronosticosMiembro.filter(
-            (p) => (p.puntos ?? 0) > 0
-          ).length;
-
-          return {
-            id: miembro.id,
-            nombre: nombreVisible,
-            puntos,
-            aciertos,
-          };
-        }
-      );
-
-      rankingCalculado.sort((a, b) => b.puntos - a.puntos);
-
-      setRanking(rankingCalculado);
-    } catch (error) {
-      console.error("Error cargando liga:", error);
-      setLiga(null);
-    } finally {
-      setCargando(false);
-    }
-  }
 
   useEffect(() => {
     if (!ligaId) return;
@@ -157,7 +134,7 @@ export default function LigaDetallePage({ params }: Props) {
           schema: "public",
           table: "pronosticos",
         },
-        () => cargarLiga(ligaId)
+        () => cargarLiga(ligaId, true)
       )
       .on(
         "postgres_changes",
@@ -166,7 +143,7 @@ export default function LigaDetallePage({ params }: Props) {
           schema: "public",
           table: "liga_participantes",
         },
-        () => cargarLiga(ligaId)
+        () => cargarLiga(ligaId, true)
       )
       .subscribe();
 
@@ -175,19 +152,202 @@ export default function LigaDetallePage({ params }: Props) {
     };
   }, [ligaId]);
 
+  async function cargarLiga(id: number, silencioso = false) {
+    if (!silencioso) {
+      setCargando(true);
+    }
+
+    setSinAcceso(false);
+    setError("");
+
+    try {
+      const usuario = await conTimeout(
+        obtenerParticipanteActual(),
+        10000,
+        "No se ha podido cargar tu perfil."
+      );
+
+      if (!usuario) {
+        setSinAcceso(true);
+        return;
+      }
+
+      setUsuarioActual({
+        id: usuario.id,
+        nombre: usuario.nombre,
+        nickname: usuario.nickname,
+      });
+
+      const { data: perteneceLiga, error: accesoError } = await conTimeout(
+        supabase
+          .from("liga_participantes")
+          .select("id")
+          .eq("liga_id", id)
+          .eq("participante_id", usuario.id)
+          .maybeSingle(),
+        10000,
+        "No se ha podido validar tu acceso a la liga."
+      );
+
+      if (accesoError || !perteneceLiga) {
+        setSinAcceso(true);
+        return;
+      }
+
+      const { data: ligaData, error: ligaError } = await conTimeout(
+        supabase.from("ligas").select("id, nombre, codigo").eq("id", id).single(),
+        10000,
+        "No se ha podido cargar la liga."
+      );
+
+      if (ligaError || !ligaData) {
+        setLiga(null);
+        setError("No se ha podido cargar la liga.");
+        return;
+      }
+
+      setLiga(ligaData as Liga);
+
+      const { data: miembrosData, error: miembrosError } = await conTimeout(
+        supabase
+          .from("liga_participantes")
+          .select(
+            `
+            participante_id,
+            participantes (
+              id,
+              nombre,
+              nickname
+            )
+          `
+          )
+          .eq("liga_id", id),
+        10000,
+        "No se han podido cargar los miembros de la liga."
+      );
+
+      if (miembrosError) {
+        setError("No se han podido cargar los miembros de la liga.");
+        return;
+      }
+
+      const miembros =
+        ((miembrosData ?? []) as LigaParticipanteRow[])
+          .map((item) => normalizarParticipante(item.participantes))
+          .filter(
+            (
+              miembro
+            ): miembro is {
+              id: number;
+              nombre: string | null;
+              nickname: string | null;
+            } => Boolean(miembro)
+          ) ?? [];
+
+      const idsMiembros = miembros.map((miembro) => miembro.id);
+
+      const { data: pronosticosData, error: pronosticosError } =
+        await conTimeout(
+          idsMiembros.length > 0
+            ? supabase
+                .from("pronosticos")
+                .select("participante_id, puntos")
+                .in("participante_id", idsMiembros)
+            : supabase
+                .from("pronosticos")
+                .select("participante_id, puntos")
+                .eq("participante_id", -1),
+          10000,
+          "No se ha podido cargar el ranking."
+        );
+
+      if (pronosticosError) {
+        setError("No se ha podido cargar el ranking.");
+        return;
+      }
+
+      const pronosticos = (pronosticosData ?? []) as PronosticoRow[];
+
+      const rankingCalculado: MiembroRanking[] = miembros.map((miembro) => {
+        const nombreVisible = miembro.nickname || miembro.nombre || "Usuario";
+
+        const pronosticosMiembro = pronosticos.filter(
+          (p) => p.participante_id === miembro.id
+        );
+
+        const puntos = pronosticosMiembro.reduce(
+          (total, p) => total + (p.puntos ?? 0),
+          0
+        );
+
+        const aciertos = pronosticosMiembro.filter(
+          (p) => (p.puntos ?? 0) > 0
+        ).length;
+
+        return {
+          id: miembro.id,
+          nombre: nombreVisible,
+          puntos,
+          aciertos,
+        };
+      });
+
+      rankingCalculado.sort((a, b) => {
+        if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+        if (b.aciertos !== a.aciertos) return b.aciertos - a.aciertos;
+        return a.nombre.localeCompare(b.nombre);
+      });
+
+      setRanking(rankingCalculado);
+    } catch (err) {
+      console.error("Error cargando liga:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ha ocurrido un error cargando la liga."
+      );
+    } finally {
+      setCargando(false);
+    }
+  }
+
   async function copiarCodigo() {
     if (!liga) return;
 
-    await navigator.clipboard.writeText(liga.codigo);
+    try {
+      await navigator.clipboard.writeText(liga.codigo);
+      setCodigoCopiado(true);
 
-    alert("Código copiado");
+      setTimeout(() => {
+        setCodigoCopiado(false);
+      }, 1800);
+    } catch {
+      setError("No se ha podido copiar el código.");
+    }
   }
+
+  const top3 = ranking.slice(0, 3);
+  const lider = ranking[0] ?? null;
+  const usuarioEnRanking = ranking.find(
+    (miembro) => miembro.id === usuarioActual?.id
+  );
+  const posicionUsuario = usuarioEnRanking
+    ? ranking.findIndex((miembro) => miembro.id === usuarioEnRanking.id) + 1
+    : null;
+  const diferenciaLider =
+    lider && usuarioEnRanking ? lider.puntos - usuarioEnRanking.puntos : 0;
+  const estaPrimero = posicionUsuario === 1;
+  const miembrosTotales = ranking.length;
 
   if (cargando) {
     return (
       <main className="page">
         <div className="container">
-          <div className="emptyBox">Cargando liga...</div>
+          <section className="loadingCard">
+            <div className="spinner" />
+            <h1>Cargando tu liga...</h1>
+            <p>Preparando ranking, podio y tu posición.</p>
+          </section>
         </div>
 
         <Styles />
@@ -204,7 +364,15 @@ export default function LigaDetallePage({ params }: Props) {
             Volver a ligas
           </Link>
 
-          <div className="emptyBox">No tienes acceso a esta liga.</div>
+          <section className="emptyBox">
+            <Shield size={34} />
+            <h1>No tienes acceso a esta liga</h1>
+            <p>Entra en una liga a la que pertenezcas o únete con un código.</p>
+
+            <Link href="/ligas" className="primaryButton">
+              Ir a mis ligas
+            </Link>
+          </section>
         </div>
 
         <Styles />
@@ -221,15 +389,25 @@ export default function LigaDetallePage({ params }: Props) {
             Volver a ligas
           </Link>
 
-          <div className="emptyBox">Liga no encontrada.</div>
+          <section className="emptyBox">
+            <Trophy size={34} />
+            <h1>Liga no encontrada</h1>
+            <p>No hemos podido cargar esta liga.</p>
+
+            <button
+              type="button"
+              className="primaryButton"
+              onClick={() => ligaId && cargarLiga(ligaId)}
+            >
+              Reintentar
+            </button>
+          </section>
         </div>
 
         <Styles />
       </main>
     );
   }
-
-  const top3 = ranking.slice(0, 3);
 
   return (
     <main className="page">
@@ -239,42 +417,129 @@ export default function LigaDetallePage({ params }: Props) {
           Cambiar de liga
         </Link>
 
+        {error && (
+          <section className="errorBox">
+            <span>{error}</span>
+
+            <button
+              type="button"
+              onClick={() => ligaId && cargarLiga(ligaId)}
+              className="retryButton"
+            >
+              <RefreshCw size={16} />
+              Reintentar
+            </button>
+          </section>
+        )}
+
         <section className="hero">
-          <div className="heroIcon">
-            <Users size={34} />
+          <div className="heroGlow" />
+
+          <div className="heroMain">
+            <div className="heroIcon">
+              {estaPrimero ? <Crown size={36} /> : <Trophy size={36} />}
+            </div>
+
+            <div className="heroText">
+              <p className="eyebrow">
+                {estaPrimero ? "Vas liderando la liga" : "Tu liga privada"}
+              </p>
+
+              <h1>{liga.nombre}</h1>
+
+              <p>
+                {usuarioEnRanking && posicionUsuario
+                  ? estaPrimero
+                    ? `Vas 1º de ${miembrosTotales}. Ahora toca defender el liderato.`
+                    : `Vas ${posicionUsuario}º de ${miembrosTotales}. Estás a ${diferenciaLider} puntos del líder.`
+                  : "Compite con tus amigos y sigue la clasificación en directo."}
+              </p>
+            </div>
           </div>
 
-          <div className="heroText">
-            <p className="eyebrow">Estás dentro de la liga</p>
-            <h1>{liga.nombre}</h1>
-            <p>Ranking privado entre los miembros de esta liga.</p>
+          <div className="heroActions">
+            <Link href="/mis-pronosticos" className="heroCta">
+              <Target size={20} />
+              Hacer pronósticos
+              <ArrowRight size={18} />
+            </Link>
+
+            <button type="button" onClick={copiarCodigo} className="codeButton">
+              {codigoCopiado ? <CheckCircle2 size={18} /> : <Copy size={18} />}
+              {codigoCopiado ? "Copiado" : liga.codigo}
+            </button>
+          </div>
+        </section>
+
+        <section className="personalPanel">
+          <div className="personalCard featured">
+            <div className="personalIcon">
+              <Medal size={24} />
+            </div>
+
+            <p>Tu posición</p>
+
+            <strong>
+              {posicionUsuario ? `${posicionUsuario}º` : "-"}
+              <span> / {miembrosTotales || 0}</span>
+            </strong>
           </div>
 
-          <button onClick={copiarCodigo} className="codeButton">
-            <Copy size={18} />
-            {liga.codigo}
-          </button>
+          <div className="personalCard">
+            <div className="personalIcon">
+              <Zap size={24} />
+            </div>
+
+            <p>Tus puntos</p>
+
+            <strong>{usuarioEnRanking?.puntos ?? 0}</strong>
+          </div>
+
+          <div className="personalCard">
+            <div className="personalIcon">
+              <Target size={24} />
+            </div>
+
+            <p>Tus aciertos</p>
+
+            <strong>{usuarioEnRanking?.aciertos ?? 0}</strong>
+          </div>
+
+          <div className="personalCard">
+            <div className="personalIcon">
+              <Flame size={24} />
+            </div>
+
+            <p>Distancia al líder</p>
+
+            <strong>
+              {estaPrimero ? "Líder" : `${Math.max(diferenciaLider, 0)} pts`}
+            </strong>
+          </div>
         </section>
 
         <section className="contextActions">
           <Link href="/mis-pronosticos" className="contextAction primary">
-            <Target size={22} />
+            <Target size={23} />
+
             <div>
               <strong>Pronósticos</strong>
-              <span>Haz o revisa tus apuestas</span>
+              <span>Haz o revisa tus resultados</span>
             </div>
           </Link>
 
           <Link href="/partidos" className="contextAction">
-            <CalendarDays size={22} />
+            <CalendarDays size={23} />
+
             <div>
               <strong>Partidos</strong>
-              <span>Calendario del Mundial</span>
+              <span>Calendario completo</span>
             </div>
           </Link>
 
           <Link href="/clasificacion" className="contextAction">
-            <Table2 size={22} />
+            <Table2 size={23} />
+
             <div>
               <strong>Clasificación</strong>
               <span>Grupos y fases</span>
@@ -282,7 +547,8 @@ export default function LigaDetallePage({ params }: Props) {
           </Link>
 
           <Link href="/reglas" className="contextAction">
-            <ScrollText size={22} />
+            <ScrollText size={23} />
+
             <div>
               <strong>Reglas</strong>
               <span>Sistema de puntos</span>
@@ -290,63 +556,89 @@ export default function LigaDetallePage({ params }: Props) {
           </Link>
         </section>
 
-        <section className="statsGrid">
-          <div className="statCard">
-            <p>Miembros</p>
-            <strong>{ranking.length}</strong>
+        <section className="sectionBlock">
+          <div className="sectionHeader">
+            <div>
+              <p className="sectionEyebrow">Pique de la liga</p>
+              <h2>Podio actual</h2>
+            </div>
+
+            <Sparkles size={26} />
           </div>
 
-          <div className="statCard">
-            <p>Líder</p>
-            <strong>{ranking[0]?.nombre ?? "-"}</strong>
-          </div>
-
-          <div className="statCard">
-            <p>Puntos líder</p>
-            <strong>{ranking[0]?.puntos ?? 0}</strong>
-          </div>
+          {top3.length === 0 ? (
+            <div className="emptyBox">
+              <Trophy size={32} />
+              <h1>Aún no hay ranking</h1>
+              <p>Cuando haya pronósticos puntuados aparecerá el podio.</p>
+            </div>
+          ) : (
+            <div className="podiumGrid">
+              {top3.map((miembro, index) => (
+                <PodiumCard
+                  key={miembro.id}
+                  miembro={miembro}
+                  position={index + 1}
+                  esUsuario={miembro.id === usuarioActual?.id}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
-        <h2 className="sectionTitle">Podio de la liga</h2>
+        <section className="sectionBlock">
+          <div className="sectionHeader">
+            <div>
+              <p className="sectionEyebrow">Clasificación en directo</p>
+              <h2>Ranking completo</h2>
+            </div>
 
-        {top3.length === 0 ? (
-          <div className="emptyBox">Aún no hay miembros en esta liga.</div>
-        ) : (
-          <div className="podiumGrid">
-            {top3.map((miembro, index) => (
-              <PodiumCard
-                key={miembro.id}
-                miembro={miembro}
-                position={index + 1}
-              />
-            ))}
+            <div className="membersBadge">
+              <Users size={17} />
+              {miembrosTotales} miembros
+            </div>
           </div>
-        )}
 
-        <h2 className="sectionTitle">Clasificación privada</h2>
+          <div className="rankingList">
+            {ranking.map((miembro, index) => {
+              const esUsuario = miembro.id === usuarioActual?.id;
 
-        <div className="rankingList">
-          {ranking.map((miembro, index) => (
-            <article key={miembro.id} className="rankingRow">
-              <div className={`position position-${index + 1}`}>
-                {index + 1}
-              </div>
+              return (
+                <article
+                  key={miembro.id}
+                  className={`rankingRow ${esUsuario ? "rankingRowUser" : ""}`}
+                >
+                  <div className={`position position-${index + 1}`}>
+                    {index + 1}
+                  </div>
 
-              <div className="memberInfo">
-                <h3>{miembro.nombre}</h3>
-              </div>
+                  <div className="memberInfo">
+                    <h3>
+                      {miembro.nombre}
+                      {esUsuario && <span>Tú</span>}
+                    </h3>
 
-              <div className="memberStats">
-                <strong>{miembro.puntos}</strong>
-                <span>puntos</span>
-              </div>
+                    <p>
+                      {index === 0
+                        ? "Líder actual"
+                        : `${ranking[0]?.puntos - miembro.puntos} puntos del líder`}
+                    </p>
+                  </div>
 
-              <div className="aciertosBadge">
-                {miembro.aciertos} aciertos
-              </div>
-            </article>
-          ))}
-        </div>
+                  <div className="memberStats">
+                    <strong>{miembro.puntos}</strong>
+                    <span>puntos</span>
+                  </div>
+
+                  <div className="aciertosBadge">
+                    <Target size={15} />
+                    {miembro.aciertos}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
 
       <Styles />
@@ -357,41 +649,53 @@ export default function LigaDetallePage({ params }: Props) {
 function PodiumCard({
   miembro,
   position,
+  esUsuario,
 }: {
   miembro: MiembroRanking;
   position: number;
+  esUsuario: boolean;
 }) {
-  const colors: Record<number, string> = {
-    1: "#facc15",
-    2: "#d1d5db",
-    3: "#fb923c",
+  const config: Record<
+    number,
+    {
+      label: string;
+      className: string;
+      icon: React.ReactNode;
+    }
+  > = {
+    1: {
+      label: "Líder",
+      className: "gold",
+      icon: <Crown size={36} />,
+    },
+    2: {
+      label: "Segundo",
+      className: "silver",
+      icon: <Medal size={36} />,
+    },
+    3: {
+      label: "Tercero",
+      className: "bronze",
+      icon: <Medal size={36} />,
+    },
   };
 
+  const item = config[position];
+
   return (
-    <article
-      className="podiumCard"
-      style={{
-        border: `1px solid ${colors[position]}55`,
-        boxShadow: `0 0 35px ${colors[position]}22`,
-      }}
-    >
-      <div
-        className="podiumIcon"
-        style={{
-          background: colors[position],
-          color: position === 1 || position === 2 ? "black" : "white",
-        }}
-      >
-        {position === 1 ? <Crown size={34} /> : <Medal size={34} />}
-      </div>
+    <article className={`podiumCard ${item.className} ${esUsuario ? "mine" : ""}`}>
+      <div className="podiumIcon">{item.icon}</div>
 
-      <p className="podiumPosition">#{position}</p>
+      <p>{item.label}</p>
 
-      <h3>{miembro.nombre}</h3>
+      <h3>
+        {miembro.nombre}
+        {esUsuario && <span>Tú</span>}
+      </h3>
 
       <strong>{miembro.puntos}</strong>
 
-      <span>puntos</span>
+      <small>{miembro.aciertos} aciertos</small>
     </article>
   );
 }
@@ -402,14 +706,15 @@ function Styles() {
       .page {
         min-height: 100vh;
         background:
-          radial-gradient(circle at top, rgba(37,99,235,0.18), transparent 30%),
-          linear-gradient(180deg, #020617 0%, #111827 100%);
+          radial-gradient(circle at 50% 0%, rgba(37,99,235,0.24), transparent 32%),
+          radial-gradient(circle at 12% 18%, rgba(250,204,21,0.10), transparent 25%),
+          linear-gradient(180deg, #020617 0%, #07111f 46%, #111827 100%);
         color: white;
-        padding: 32px 16px 120px;
+        padding: 34px 16px 125px;
       }
 
       .container {
-        max-width: 1120px;
+        max-width: 1180px;
         margin: 0 auto;
       }
 
@@ -419,70 +724,184 @@ function Styles() {
         gap: 8px;
         color: #bfdbfe;
         text-decoration: none;
-        font-weight: 900;
+        font-weight: 950;
         margin-bottom: 18px;
       }
 
       .hero {
+        position: relative;
+        overflow: hidden;
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: center;
+        background:
+          linear-gradient(135deg, rgba(15,23,42,0.98), rgba(15,23,42,0.72)),
+          radial-gradient(circle at top right, rgba(37,99,235,0.25), transparent 40%);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 36px;
+        padding: 30px;
+        box-shadow: 0 30px 90px rgba(0,0,0,0.28);
+      }
+
+      .heroGlow {
+        position: absolute;
+        width: 280px;
+        height: 280px;
+        right: -100px;
+        top: -110px;
+        border-radius: 999px;
+        background: rgba(37,99,235,0.28);
+        filter: blur(18px);
+      }
+
+      .heroMain,
+      .heroActions {
+        position: relative;
+        z-index: 1;
+      }
+
+      .heroMain {
+        display: flex;
         align-items: center;
         gap: 20px;
-        background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.65));
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 32px;
-        padding: 28px;
+        min-width: 0;
       }
 
       .heroIcon {
-        width: 76px;
-        height: 76px;
-        border-radius: 24px;
-        background: #2563eb;
+        width: 82px;
+        height: 82px;
+        border-radius: 28px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 24px 58px rgba(37,99,235,0.32);
       }
 
-      .eyebrow {
-        color: #93c5fd;
+      .eyebrow,
+      .sectionEyebrow {
+        margin: 0 0 6px;
+        color: #60a5fa;
         font-size: 13px;
+        font-weight: 950;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        font-weight: 900;
-        letter-spacing: 1px;
-        margin: 0;
       }
 
       .hero h1 {
-        font-size: 42px;
-        font-weight: 900;
-        margin: 4px 0;
+        margin: 0;
+        font-size: clamp(38px, 6vw, 62px);
+        line-height: 0.95;
+        letter-spacing: -0.055em;
+        font-weight: 950;
       }
 
       .hero p {
-        color: #94a3b8;
-        margin: 0;
+        margin: 12px 0 0;
+        color: #cbd5e1;
+        font-size: 18px;
+        line-height: 1.5;
+        max-width: 680px;
       }
 
-      .codeButton {
+      .heroActions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 235px;
+      }
+
+      .heroCta,
+      .primaryButton {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        justify-content: center;
+        gap: 9px;
         border: none;
-        border-radius: 16px;
-        padding: 14px 18px;
-        background: rgba(37,99,235,0.22);
-        border: 1px solid rgba(37,99,235,0.55);
+        border-radius: 18px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
         color: white;
-        font-weight: 900;
+        padding: 16px 18px;
+        font-weight: 950;
+        text-decoration: none;
+        box-shadow: 0 18px 44px rgba(37,99,235,0.30);
         cursor: pointer;
         font-family: inherit;
         font-size: 15px;
       }
 
+      .codeButton,
+      .retryButton {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.13);
+        color: #dbeafe;
+        font-weight: 950;
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      .personalPanel {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .personalCard {
+        background: rgba(15,23,42,0.78);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 26px;
+        padding: 20px;
+      }
+
+      .personalCard.featured {
+        background: linear-gradient(145deg, rgba(37,99,235,0.22), rgba(15,23,42,0.78));
+        border-color: rgba(96,165,250,0.28);
+      }
+
+      .personalIcon {
+        width: 42px;
+        height: 42px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(37,99,235,0.18);
+        color: #bfdbfe;
+        margin-bottom: 14px;
+      }
+
+      .personalCard p {
+        margin: 0 0 7px;
+        color: #94a3b8;
+        font-weight: 850;
+        font-size: 13px;
+      }
+
+      .personalCard strong {
+        display: block;
+        font-size: 32px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .personalCard strong span {
+        color: #94a3b8;
+        font-size: 16px;
+      }
+
       .contextActions {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 14px;
         margin-top: 20px;
       }
@@ -495,7 +914,7 @@ function Styles() {
         color: white;
         background: rgba(255,255,255,0.06);
         border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 22px;
+        border-radius: 24px;
         padding: 18px;
         transition: 0.2s ease;
       }
@@ -514,146 +933,207 @@ function Styles() {
       .contextAction strong {
         display: block;
         font-size: 16px;
-        font-weight: 900;
+        font-weight: 950;
       }
 
       .contextAction span {
         display: block;
+        color: #94a3b8;
+        font-size: 13px;
         margin-top: 3px;
-        color: #94a3b8;
-        font-size: 12px;
-        font-weight: 800;
+        font-weight: 750;
       }
 
-      .statsGrid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
+      .sectionBlock {
+        margin-top: 38px;
+      }
+
+      .sectionHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         gap: 18px;
-        margin-top: 24px;
+        margin-bottom: 20px;
       }
 
-      .statCard {
-        background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 24px;
-        padding: 22px;
-      }
-
-      .statCard p {
-        color: #94a3b8;
-        font-weight: 900;
-        text-transform: uppercase;
-        font-size: 12px;
-        letter-spacing: 1px;
+      .sectionHeader h2 {
         margin: 0;
+        font-size: clamp(31px, 4vw, 44px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.045em;
       }
 
-      .statCard strong {
-        display: block;
-        margin-top: 10px;
-        font-size: 28px;
-        font-weight: 900;
-      }
-
-      .sectionTitle {
-        font-size: 32px;
-        font-weight: 900;
-        margin: 34px 0 18px;
+      .membersBadge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 10px 14px;
+        color: #bfdbfe;
+        background: rgba(37,99,235,0.13);
+        border: 1px solid rgba(96,165,250,0.22);
+        font-weight: 950;
+        white-space: nowrap;
       }
 
       .podiumGrid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 18px;
       }
 
       .podiumCard {
-        background: linear-gradient(145deg, rgba(15,23,42,0.95), rgba(15,23,42,0.62));
+        position: relative;
+        overflow: hidden;
         border-radius: 30px;
-        padding: 26px;
+        padding: 28px;
         text-align: center;
+        background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.68));
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: 0 22px 70px rgba(0,0,0,0.22);
+      }
+
+      .podiumCard.gold {
+        border-color: rgba(250,204,21,0.38);
+        box-shadow: 0 28px 80px rgba(250,204,21,0.12);
+      }
+
+      .podiumCard.silver {
+        border-color: rgba(209,213,219,0.35);
+      }
+
+      .podiumCard.bronze {
+        border-color: rgba(251,146,60,0.35);
+      }
+
+      .podiumCard.mine {
+        outline: 2px solid rgba(96,165,250,0.55);
       }
 
       .podiumIcon {
         width: 72px;
         height: 72px;
-        border-radius: 24px;
+        border-radius: 26px;
+        margin: 0 auto 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 16px;
+        background: rgba(37,99,235,0.16);
+        color: #facc15;
       }
 
-      .podiumPosition {
-        color: #cbd5e1;
-        font-weight: 900;
-        margin: 0;
+      .podiumCard.silver .podiumIcon {
+        color: #e5e7eb;
+      }
+
+      .podiumCard.bronze .podiumIcon {
+        color: #fb923c;
+      }
+
+      .podiumCard p {
+        margin: 0 0 8px;
+        color: #94a3b8;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 12px;
       }
 
       .podiumCard h3 {
-        font-size: 26px;
-        font-weight: 900;
-        margin: 8px 0 0;
+        margin: 0;
+        font-size: 25px;
+        font-weight: 950;
+        letter-spacing: -0.03em;
+      }
+
+      .podiumCard h3 span,
+      .memberInfo h3 span {
+        display: inline-flex;
+        margin-left: 8px;
+        color: #bfdbfe;
+        background: rgba(37,99,235,0.20);
+        border: 1px solid rgba(96,165,250,0.28);
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 11px;
+        vertical-align: middle;
       }
 
       .podiumCard strong {
         display: block;
-        font-size: 42px;
-        font-weight: 900;
-        margin-top: 18px;
+        margin-top: 14px;
+        font-size: 44px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.06em;
       }
 
-      .podiumCard span {
+      .podiumCard small {
         color: #94a3b8;
+        font-weight: 850;
       }
 
       .rankingList {
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: 12px;
       }
 
       .rankingRow {
         display: grid;
         grid-template-columns: auto 1fr auto auto;
-        gap: 16px;
         align-items: center;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.10);
+        gap: 16px;
         border-radius: 24px;
         padding: 18px;
+        background: rgba(15,23,42,0.72);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+
+      .rankingRowUser {
+        background: linear-gradient(145deg, rgba(37,99,235,0.22), rgba(15,23,42,0.78));
+        border-color: rgba(96,165,250,0.32);
       }
 
       .position {
-        width: 48px;
-        height: 48px;
-        border-radius: 999px;
-        background: #1e293b;
+        width: 46px;
+        height: 46px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.08);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 900;
-        font-size: 20px;
+        font-weight: 950;
+        color: white;
       }
 
       .position-1 {
-        background: #facc15;
-        color: black;
+        background: rgba(250,204,21,0.18);
+        color: #fde68a;
       }
 
       .position-2 {
-        background: #d1d5db;
-        color: black;
+        background: rgba(209,213,219,0.16);
+        color: #e5e7eb;
       }
 
       .position-3 {
-        background: #fb923c;
-        color: black;
+        background: rgba(251,146,60,0.16);
+        color: #fed7aa;
       }
 
       .memberInfo h3 {
-        font-size: 22px;
-        font-weight: 900;
         margin: 0;
+        font-size: 20px;
+        font-weight: 950;
+      }
+
+      .memberInfo p {
+        margin: 5px 0 0;
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 750;
       }
 
       .memberStats {
@@ -662,101 +1142,190 @@ function Styles() {
 
       .memberStats strong {
         display: block;
-        font-size: 30px;
-        font-weight: 900;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 950;
       }
 
       .memberStats span {
         color: #94a3b8;
-        font-size: 13px;
+        font-size: 12px;
+        font-weight: 850;
       }
 
       .aciertosBadge {
-        background: rgba(22,163,74,0.16);
-        border: 1px solid rgba(22,163,74,0.32);
-        color: #86efac;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
         border-radius: 999px;
-        padding: 8px 12px;
-        font-weight: 900;
-        font-size: 13px;
+        padding: 10px 12px;
+        color: #bfdbfe;
+        background: rgba(37,99,235,0.13);
+        border: 1px solid rgba(96,165,250,0.22);
+        font-weight: 950;
+        white-space: nowrap;
       }
 
-      .emptyBox {
-        background: rgba(255,255,255,0.06);
+      .loadingCard,
+      .emptyBox,
+      .errorBox {
+        background: rgba(15,23,42,0.74);
         border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 24px;
-        padding: 26px;
-        color: #94a3b8;
-        font-weight: 900;
+        border-radius: 30px;
+        padding: 32px;
         text-align: center;
+        color: #94a3b8;
       }
 
-      @media (max-width: 900px) {
-        .contextActions {
-          grid-template-columns: repeat(2, 1fr);
+      .loadingCard {
+        min-height: 300px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .loadingCard h1,
+      .emptyBox h1 {
+        margin: 12px 0 8px;
+        color: white;
+        font-size: 32px;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .loadingCard p,
+      .emptyBox p {
+        margin: 0 0 18px;
+        line-height: 1.55;
+        font-weight: 750;
+      }
+
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: 3px solid rgba(255,255,255,0.16);
+        border-top-color: #60a5fa;
+        animation: spin 0.9s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
         }
       }
 
-      @media (max-width: 800px) {
+      .errorBox {
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        text-align: left;
+        color: #fecaca;
+        background: rgba(239,68,68,0.10);
+        border-color: rgba(239,68,68,0.24);
+      }
+
+      @media (max-width: 920px) {
         .hero {
           grid-template-columns: 1fr;
         }
 
-        .statsGrid,
+        .heroActions {
+          min-width: 0;
+          flex-direction: row;
+        }
+
+        .heroCta,
+        .codeButton {
+          flex: 1;
+        }
+
+        .personalPanel,
+        .contextActions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
         .podiumGrid {
           grid-template-columns: 1fr;
         }
-
-        .rankingRow {
-          grid-template-columns: auto 1fr;
-        }
-
-        .memberStats,
-        .aciertosBadge {
-          grid-column: 1 / -1;
-          text-align: center;
-        }
-
-        .hero h1 {
-          font-size: 34px;
-        }
       }
 
-      @media (max-width: 560px) {
+      @media (max-width: 640px) {
         .page {
-          padding: 24px 12px 120px;
+          padding: 84px 14px 125px;
         }
 
         .hero {
-          padding: 22px;
-          border-radius: 26px;
+          border-radius: 30px;
+          padding: 24px;
+        }
+
+        .heroMain {
+          align-items: flex-start;
         }
 
         .heroIcon {
-          width: 64px;
-          height: 64px;
-          border-radius: 20px;
+          width: 62px;
+          height: 62px;
+          border-radius: 22px;
         }
 
         .hero h1 {
-          font-size: 30px;
+          font-size: 37px;
         }
 
-        .codeButton {
-          width: 100%;
-          justify-content: center;
+        .hero p {
+          font-size: 16px;
         }
 
+        .heroActions {
+          flex-direction: column;
+        }
+
+        .personalPanel,
         .contextActions {
           grid-template-columns: 1fr;
         }
 
-        .contextAction {
-          padding: 16px;
+        .personalCard {
+          padding: 18px;
         }
 
-        .sectionTitle {
-          font-size: 28px;
+        .contextAction {
+          padding: 17px;
+        }
+
+        .sectionHeader {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .rankingRow {
+          grid-template-columns: auto 1fr auto;
+          gap: 12px;
+          padding: 15px;
+        }
+
+        .memberStats {
+          text-align: right;
+        }
+
+        .aciertosBadge {
+          grid-column: 2 / 4;
+          justify-self: start;
+        }
+
+        .errorBox {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .retryButton {
+          width: 100%;
         }
       }
     `}</style>

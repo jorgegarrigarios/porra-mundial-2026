@@ -37,9 +37,7 @@ function crearNombreDesdeEmail(email: string | null | undefined) {
   return nombre && nombre.length > 0 ? nombre : "Usuario";
 }
 
-function normalizarParticipante(
-  participante: ParticipanteRow
-): ParticipanteActual {
+function normalizarParticipante(participante: ParticipanteRow): ParticipanteActual {
   return {
     id: participante.id,
     nombre: participante.nombre,
@@ -51,17 +49,14 @@ function normalizarParticipante(
   };
 }
 
-async function conTimeout<T>(
+async function conTimeoutSuave<T>(
   operacion: PromiseLike<T>,
-  ms: number,
-  mensaje = "La operación ha tardado demasiado."
-): Promise<T> {
+  ms: number
+): Promise<T | null> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(mensaje));
-    }, ms);
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => resolve(null), ms);
   });
 
   try {
@@ -73,22 +68,30 @@ async function conTimeout<T>(
 
 export async function obtenerParticipanteActual(): Promise<ParticipanteActual | null> {
   try {
-    const userResponse = await conTimeout(
-      supabase.auth.getUser(),
-      8000,
-      "Timeout obteniendo usuario autenticado."
+    const sessionResponse = await conTimeoutSuave(
+      supabase.auth.getSession(),
+      5000
     );
 
-    const user = userResponse.data.user;
+    let user = sessionResponse?.data.session?.user ?? null;
 
-    if (userResponse.error || !user) {
-      if (userResponse.error) {
-        console.error(
-          "Error obteniendo usuario autenticado:",
+    if (!user) {
+      const userResponse = await conTimeoutSuave(
+        supabase.auth.getUser(),
+        7000
+      );
+
+      user = userResponse?.data.user ?? null;
+
+      if (userResponse?.error) {
+        console.warn(
+          "No se pudo validar usuario autenticado:",
           userResponse.error.message
         );
       }
+    }
 
+    if (!user) {
       return null;
     }
 
@@ -110,12 +113,10 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
         : null
     );
 
-    const nombreFallback =
-      nombreMetadata || crearNombreDesdeEmail(user.email);
-
+    const nombreFallback = nombreMetadata || crearNombreDesdeEmail(user.email);
     const nicknameFallback = nicknameMetadata || nombreFallback;
 
-    const participanteResponse = (await conTimeout(
+    const participanteResponse = (await conTimeoutSuave(
       supabase
         .from("participantes")
         .select(
@@ -123,16 +124,19 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
         )
         .eq("auth_user_id", user.id)
         .maybeSingle(),
-      8000,
-      "Timeout buscando participante por auth_user_id."
-    )) as SupabaseResponse<ParticipanteRow>;
+      8000
+    )) as SupabaseResponse<ParticipanteRow> | null;
+
+    if (!participanteResponse) {
+      console.warn("Timeout buscando participante por auth_user_id.");
+      return null;
+    }
 
     if (participanteResponse.error) {
-      console.error(
+      console.warn(
         "Error buscando participante por auth_user_id:",
         participanteResponse.error.message
       );
-
       return null;
     }
 
@@ -150,7 +154,7 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
         return normalizarParticipante(participanteExistente);
       }
 
-      const participanteActualizadoResponse = (await conTimeout(
+      const participanteActualizadoResponse = (await conTimeoutSuave(
         supabase
           .from("participantes")
           .update({
@@ -167,24 +171,17 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
             "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
           )
           .single(),
-        8000,
-        "Timeout actualizando participante existente."
-      )) as SupabaseResponse<ParticipanteRow>;
+        8000
+      )) as SupabaseResponse<ParticipanteRow> | null;
 
-      if (participanteActualizadoResponse.error) {
-        console.error(
-          "Error actualizando participante existente:",
-          participanteActualizadoResponse.error.message
-        );
-
-        return normalizarParticipante(participanteExistente);
+      if (
+        participanteActualizadoResponse?.data &&
+        !participanteActualizadoResponse.error
+      ) {
+        return normalizarParticipante(participanteActualizadoResponse.data);
       }
 
-      if (!participanteActualizadoResponse.data) {
-        return normalizarParticipante(participanteExistente);
-      }
-
-      return normalizarParticipante(participanteActualizadoResponse.data);
+      return normalizarParticipante(participanteExistente);
     }
 
     const nuevoParticipante = {
@@ -197,7 +194,7 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
       acepta_terminos: true,
     };
 
-    const participanteCreadoResponse = (await conTimeout(
+    const participanteCreadoResponse = (await conTimeoutSuave(
       supabase
         .from("participantes")
         .insert(nuevoParticipante)
@@ -205,28 +202,29 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
           "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
         )
         .single(),
-      8000,
-      "Timeout creando participante automáticamente."
-    )) as SupabaseResponse<ParticipanteRow>;
+      8000
+    )) as SupabaseResponse<ParticipanteRow> | null;
+
+    if (!participanteCreadoResponse) {
+      console.warn("Timeout creando participante automáticamente.");
+      return null;
+    }
 
     if (participanteCreadoResponse.error) {
-      console.error(
+      console.warn(
         "Error creando participante automáticamente:",
         participanteCreadoResponse.error.message
       );
-
       return null;
     }
 
     if (!participanteCreadoResponse.data) {
-      console.error("No se recibió participante creado.");
       return null;
     }
 
     return normalizarParticipante(participanteCreadoResponse.data);
   } catch (error) {
-    console.error("Error inesperado en obtenerParticipanteActual:", error);
-
+    console.warn("Error controlado en obtenerParticipanteActual:", error);
     return null;
   }
 }

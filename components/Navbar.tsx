@@ -22,63 +22,13 @@ import {
 } from "@/lib/participante";
 
 const links = [
-  {
-    href: "/",
-    label: "Inicio",
-    icon: Home,
-    public: true,
-  },
-  {
-    href: "/partidos",
-    label: "Partidos",
-    icon: CalendarDays,
-    public: true,
-  },
-  {
-    href: "/mis-pronosticos",
-    label: "Pronósticos",
-    icon: Target,
-    public: false,
-  },
-  {
-    href: "/clasificacion",
-    label: "Clasificación",
-    icon: Table2,
-    public: true,
-  },
-  {
-    href: "/ligas",
-    label: "Ligas",
-    icon: Users,
-    public: true,
-  },
-  {
-    href: "/reglas",
-    label: "Reglas",
-    icon: Shield,
-    public: false,
-  },
+  { href: "/", label: "Inicio", icon: Home, public: true },
+  { href: "/partidos", label: "Partidos", icon: CalendarDays, public: true },
+  { href: "/mis-pronosticos", label: "Pronósticos", icon: Target, public: false },
+  { href: "/clasificacion", label: "Clasificación", icon: Table2, public: true },
+  { href: "/ligas", label: "Ligas", icon: Users, public: true },
+  { href: "/reglas", label: "Reglas", icon: Shield, public: false },
 ];
-
-async function conTimeout<T>(
-  operacion: PromiseLike<T>,
-  ms: number,
-  mensaje = "La operación ha tardado demasiado."
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(mensaje));
-    }, ms);
-  });
-
-  try {
-    return await Promise.race([Promise.resolve(operacion), timeout]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
-}
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -95,67 +45,7 @@ export default function Navbar() {
   useEffect(() => {
     let mounted = true;
 
-    async function cargarUsuarioDesdeSesion() {
-      try {
-        const {
-          data: { session },
-        } = await conTimeout(
-          supabase.auth.getSession(),
-          5000,
-          "Timeout cargando sesión en navbar."
-        );
-
-        if (!mounted) return;
-
-        const user = session?.user;
-
-        if (!user) {
-          setHaySesion(false);
-          setNombreVisible(null);
-          setIsAdmin(false);
-          return;
-        }
-
-        setHaySesion(true);
-
-        const participante = await conTimeout(
-          obtenerParticipanteActual(),
-          8000,
-          "Timeout cargando participante en navbar."
-        );
-
-        if (!mounted) return;
-
-        setNombreVisible(
-          obtenerNombreVisibleParticipante(participante, user.email)
-        );
-        setIsAdmin(participante?.role === "admin");
-      } catch (error) {
-        console.error("Error cargando sesión navbar:", error);
-
-        if (!mounted) return;
-
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session?.user) {
-          setHaySesion(true);
-          setNombreVisible(session.user.email || "Usuario");
-        } else {
-          setHaySesion(false);
-          setNombreVisible(null);
-        }
-
-        setIsAdmin(false);
-      }
-    }
-
-    cargarUsuarioDesdeSesion();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    async function aplicarSesion(session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) {
       if (!mounted) return;
 
       const user = session?.user;
@@ -170,26 +60,46 @@ export default function Navbar() {
       setHaySesion(true);
 
       try {
-        const participante = await conTimeout(
-          obtenerParticipanteActual(),
-          8000,
-          "Timeout cargando participante tras cambio auth."
-        );
+        const participante = await obtenerParticipanteActual();
 
         if (!mounted) return;
 
-        setNombreVisible(
-          obtenerNombreVisibleParticipante(participante, user.email)
-        );
-        setIsAdmin(participante?.role === "admin");
-      } catch (error) {
-        console.error("Error cargando participante tras cambio auth:", error);
-
+        if (participante) {
+          setNombreVisible(
+            obtenerNombreVisibleParticipante(participante, user.email)
+          );
+          setIsAdmin(participante.role === "admin");
+        } else {
+          setNombreVisible(user.email || "Usuario");
+          setIsAdmin(false);
+        }
+      } catch {
         if (!mounted) return;
 
         setNombreVisible(user.email || "Usuario");
         setIsAdmin(false);
       }
+    }
+
+    async function cargarUsuarioDesdeSesion() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        await aplicarSesion(data.session);
+      } catch {
+        if (!mounted) return;
+
+        setHaySesion(false);
+        setNombreVisible(null);
+        setIsAdmin(false);
+      }
+    }
+
+    cargarUsuarioDesdeSesion();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      aplicarSesion(session);
     });
 
     return () => {
@@ -225,7 +135,6 @@ export default function Navbar() {
               alt="Mundial 2026"
               className="brandLogo"
             />
-
             <span>Porra Mundial</span>
           </Link>
 

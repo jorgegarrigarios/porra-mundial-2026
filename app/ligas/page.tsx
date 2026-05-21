@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Users,
@@ -67,13 +68,19 @@ function normalizarLigaRelacion(ligas: Liga | Liga[] | null): Liga | null {
 }
 
 export default function LigasPage() {
+  const router = useRouter();
+  const yaRedirigio = useRef(false);
+
   const [participante, setParticipante] = useState<Participante | null>(null);
   const [misLigas, setMisLigas] = useState<Liga[]>([]);
   const [ligasPendientes, setLigasPendientes] = useState<Liga[]>([]);
+
   const [nombreLiga, setNombreLiga] = useState("");
   const [codigoLiga, setCodigoLiga] = useState("");
+
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [loadingAccion, setLoadingAccion] = useState(false);
+
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
@@ -134,7 +141,15 @@ export default function LigasPage() {
           .map((item) => normalizarLigaRelacion(item.ligas))
           .filter((liga): liga is Liga => Boolean(liga)) ?? [];
 
-      setMisLigas(ligasMiembro.filter((liga) => liga.estado === "activa"));
+      const ligasActivas = ligasMiembro.filter((liga) => liga.estado === "activa");
+
+      setMisLigas(ligasActivas);
+
+      if (ligasActivas.length === 1 && !yaRedirigio.current) {
+        yaRedirigio.current = true;
+        router.replace(`/ligas/${ligasActivas[0].id}`);
+        return;
+      }
 
       const { data: pendientes } = await conTimeout(
         supabase
@@ -149,7 +164,11 @@ export default function LigasPage() {
       setLigasPendientes((pendientes ?? []) as Liga[]);
     } catch (err) {
       console.error("Error cargando pantalla de ligas:", err);
-      setError(err instanceof Error ? err.message : "Ha ocurrido un error cargando tus ligas.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ha ocurrido un error cargando tus ligas."
+      );
     } finally {
       setLoadingInicial(false);
     }
@@ -197,7 +216,11 @@ export default function LigasPage() {
       await cargar();
     } catch (err) {
       console.error("Error solicitando liga:", err);
-      setError(err instanceof Error ? err.message : "Ha ocurrido un error solicitando la liga.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ha ocurrido un error solicitando la liga."
+      );
     } finally {
       setLoadingAccion(false);
     }
@@ -268,7 +291,11 @@ export default function LigasPage() {
       await cargar();
     } catch (err) {
       console.error("Error uniéndose a liga:", err);
-      setError(err instanceof Error ? err.message : "Ha ocurrido un error uniéndote a la liga.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ha ocurrido un error uniéndote a la liga."
+      );
     } finally {
       setLoadingAccion(false);
     }
@@ -343,7 +370,8 @@ export default function LigasPage() {
                   </div>
 
                   <span className="countPill">
-                    {misLigas.length} {misLigas.length === 1 ? "liga activa" : "ligas activas"}
+                    {misLigas.length}{" "}
+                    {misLigas.length === 1 ? "liga activa" : "ligas activas"}
                   </span>
                 </div>
 
@@ -391,8 +419,9 @@ export default function LigasPage() {
                 <Trophy size={34} />
                 <h2>Aún no estás en ninguna liga</h2>
                 <p>
-                  Lo más rápido es introducir el código que te hayan enviado. Si quieres crear una liga nueva,
-                  puedes solicitarla y quedará pendiente de aprobación.
+                  Lo más rápido es introducir el código que te hayan enviado. Si
+                  quieres crear una liga nueva, puedes solicitarla y quedará
+                  pendiente de aprobación.
                 </p>
               </section>
             )}
@@ -474,7 +503,7 @@ export default function LigasPage() {
 
                 <div className="leaguesGrid">
                   {ligasPendientes.map((liga) => (
-                    <article key={liga.id} className="leagueCard">
+                    <article key={liga.id} className="leagueCard" >
                       <div className="leagueCardTop">
                         <div>
                           <p className="leagueLabel">Liga</p>
@@ -643,7 +672,9 @@ export default function LigasPage() {
         }
 
         @keyframes spin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         .continueSection {
@@ -694,7 +725,11 @@ export default function LigasPage() {
 
         .actionCard,
         .leagueCard {
-          background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.68));
+          background: linear-gradient(
+            145deg,
+            rgba(15,23,42,0.98),
+            rgba(15,23,42,0.68)
+          );
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 30px;
           padding: 28px;
@@ -818,7 +853,11 @@ export default function LigasPage() {
           content: "";
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at top right, rgba(37,99,235,0.12), transparent 38%);
+          background: radial-gradient(
+            circle at top right,
+            rgba(37,99,235,0.12),
+            transparent 38%
+          );
           pointer-events: none;
         }
 
