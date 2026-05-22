@@ -6,9 +6,7 @@ import {
   Flame,
   Goal,
   Medal,
-  MinusCircle,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Star,
   Target,
@@ -29,15 +27,14 @@ export default function ReglasPage() {
           <div className="heroText">
             <div className="eyebrow">
               <Sparkles size={16} />
-              Sistema de puntos V1.2
+              Sistema definitivo V1.2
             </div>
 
             <h1>Reglas y puntuación</h1>
 
             <p>
-              Pronostica partidos, acierta bonus del Mundial y compite hasta el
-              último minuto de la final. El sistema está diseñado para que la
-              porra sea clara, justa y emocionante durante todo el torneo.
+              Una porra rápida en fase de grupos, más intensa en eliminatorias y
+              con bonus para mantener la emoción hasta el último partido.
             </p>
           </div>
         </section>
@@ -45,48 +42,88 @@ export default function ReglasPage() {
         <section className="summaryGrid">
           <article className="summaryCard highlight">
             <div className="summaryIcon">
-              <Target size={22} />
-            </div>
-
-            <span>Partidos</span>
-
-            <strong>La base de la porra</strong>
-
-            <p>
-              Suma puntos en cada partido acertando marcador exacto, ganador o
-              diferencia de goles.
-            </p>
-          </article>
-
-          <article className="summaryCard">
-            <div className="summaryIcon">
-              <CalendarClock size={22} />
-            </div>
-
-            <span>Bonus previos</span>
-
-            <strong>Se bloquean al empezar el Mundial</strong>
-
-            <p>
-              Campeón, finalistas, Bota de Oro, clasificados de grupo,
-              revelación, decepción y premios individuales.
-            </p>
-          </article>
-
-          <article className="summaryCard">
-            <div className="summaryIcon">
               <Zap size={22} />
+            </div>
+
+            <span>Fase de grupos</span>
+
+            <strong>Pronóstico rápido 1X2</strong>
+
+            <p>
+              Elige si gana el local, hay empate o gana el visitante. Rápido,
+              sencillo y perfecto para móvil.
+            </p>
+          </article>
+
+          <article className="summaryCard">
+            <div className="summaryIcon">
+              <Target size={22} />
             </div>
 
             <span>Eliminatorias</span>
 
-            <strong>Emoción hasta el final</strong>
+            <strong>Resultado exacto</strong>
 
             <p>
-              En los cruces podrás sumar puntos extra si aciertas que un partido
-              se decide por penaltis.
+              En los cruces aumenta la emoción: pronostica marcador exacto y qué
+              selección pasa si pones empate.
             </p>
           </article>
+
+          <article className="summaryCard">
+            <div className="summaryIcon">
+              <Crown size={22} />
+            </div>
+
+            <span>Bonus Mundial</span>
+
+            <strong>Emoción hasta la final</strong>
+
+            <p>
+              Campeón, finalistas, Bota de Oro, revelación, decepción y premios
+              individuales.
+            </p>
+          </article>
+        </section>
+
+        <section className="mainCard">
+          <div className="sectionHeader">
+            <Zap size={24} />
+
+            <div>
+              <h2>1. Fase de grupos: 1X2</h2>
+
+              <p>
+                Para evitar que la porra sea pesada, en fase de grupos solo hay
+                que elegir el signo del partido.
+              </p>
+            </div>
+          </div>
+
+          <div className="oneXTwoGrid">
+            <article className="choiceCard home">
+              <span>1</span>
+              <h3>Gana el local</h3>
+              <p>Ejemplo: España gana a Japón.</p>
+            </article>
+
+            <article className="choiceCard draw">
+              <span>X</span>
+              <h3>Empate</h3>
+              <p>Ejemplo: España y Japón empatan.</p>
+            </article>
+
+            <article className="choiceCard away">
+              <span>2</span>
+              <h3>Gana el visitante</h3>
+              <p>Ejemplo: Japón gana a España.</p>
+            </article>
+          </div>
+
+          <div className="pointsBanner">
+            <strong>3 puntos</strong>
+            <span>por cada 1X2 acertado en fase de grupos</span>
+          </div>
         </section>
 
         <section className="mainCard">
@@ -94,11 +131,11 @@ export default function ReglasPage() {
             <Target size={24} />
 
             <div>
-              <h2>1. Puntos por partidos</h2>
+              <h2>2. Eliminatorias: resultado exacto</h2>
 
               <p>
-                Estas son las reglas actuales de los pronósticos partido a
-                partido.
+                En octavos, cuartos, semifinales, tercer puesto y final, la porra
+                se vuelve más intensa.
               </p>
             </div>
           </div>
@@ -110,14 +147,14 @@ export default function ReglasPage() {
                 <span>5 puntos</span>
               </div>
 
-              <h3>Marcador exacto</h3>
+              <h3>Resultado exacto</h3>
 
-              <p>Aciertas exactamente el resultado del partido.</p>
+              <p>Aciertas exactamente el marcador del partido.</p>
 
               <div className="example">
                 <strong>Ejemplo</strong>
 
-                <div className="exampleMatch">España 2 - 1 Brasil</div>
+                <div className="exampleMatch">Argentina 2 - 1 Francia</div>
 
                 <div className="exampleResult success">
                   Tu pronóstico: 2 - 1
@@ -131,69 +168,85 @@ export default function ReglasPage() {
                 <span>3 puntos</span>
               </div>
 
-              <h3>Ganador correcto</h3>
+              <h3>Clasificado correcto</h3>
 
               <p>
-                No aciertas el marcador exacto, pero sí el ganador o el empate.
+                No aciertas el marcador exacto, pero sí la selección que pasa de
+                ronda.
               </p>
 
               <div className="example">
                 <strong>Ejemplo</strong>
 
-                <div className="exampleMatch">Argentina 3 - 1 Japón</div>
+                <div className="exampleMatch">Brasil 1 - 0 Alemania</div>
 
                 <div className="exampleResult partial">
-                  Tu pronóstico: 2 - 0
+                  Tu pronóstico: Brasil 2 - 0
                 </div>
               </div>
             </article>
+          </div>
 
-            <article className="ruleCard diff">
-              <div className="ruleTop">
-                <MinusCircle size={22} />
-                <span>1 punto</span>
-              </div>
+          <div className="tieCard">
+            <div className="tieIcon">
+              <Target size={24} />
+            </div>
 
-              <h3>Diferencia de goles</h3>
+            <div>
+              <h3>¿Y si pronosticas empate?</h3>
 
               <p>
-                Aciertas la diferencia de goles, aunque no el marcador exacto.
+                Si pones un empate en eliminatorias, tendrás que elegir qué
+                selección pasa. Esto sirve para saber tu clasificado, pero{" "}
+                <strong>no da puntos extra</strong>.
               </p>
 
-              <div className="example">
-                <strong>Ejemplo</strong>
-
-                <div className="exampleMatch">Francia 2 - 1 México</div>
-
-                <div className="exampleResult neutral">
-                  Tu pronóstico: 3 - 2
-                </div>
+              <div className="tieExample">
+                <span>Pronóstico:</span>
+                <strong>Argentina 1 - 1 Francia · Pasa Argentina</strong>
               </div>
-            </article>
+            </div>
+          </div>
+        </section>
 
-            <article className="ruleCard fail">
-              <div className="ruleTop">
-                <ShieldCheck size={22} />
-                <span>0 puntos</span>
-              </div>
+        <section className="mainCard">
+          <div className="sectionHeader">
+            <Users size={24} />
 
-              <h3>Pronóstico incorrecto</h3>
+            <div>
+              <h2>3. Clasificados de grupo</h2>
 
               <p>
-                No aciertas ni el marcador, ni el ganador, ni la diferencia de
-                goles.
+                Antes de empezar el Mundial, pronostica qué selecciones pasan de
+                cada grupo.
               </p>
+            </div>
+          </div>
 
-              <div className="example">
-                <strong>Ejemplo</strong>
+          <div className="groupScoring">
+            <div className="scoreLine">
+              <strong>2 puntos</strong>
+              <span>por cada selección acertada</span>
+            </div>
 
-                <div className="exampleMatch">Alemania 1 - 0 USA</div>
+            <div className="scoreLine">
+              <strong>+1 punto</strong>
+              <span>si aciertas los 2 clasificados del grupo</span>
+            </div>
 
-                <div className="exampleResult failResult">
-                  Tu pronóstico: 0 - 2
-                </div>
-              </div>
-            </article>
+            <div className="scoreLine">
+              <strong>+1 punto</strong>
+              <span>si aciertas también el orden exacto</span>
+            </div>
+          </div>
+
+          <div className="exampleWide">
+            <strong>Ejemplo</strong>
+
+            <p>
+              Si pasan España y Japón, y tú pronosticas España 1ª y Japón 2ª,
+              sumas 2 + 2 + 1 + 1 = <b>6 puntos</b>.
+            </p>
           </div>
         </section>
 
@@ -202,7 +255,7 @@ export default function ReglasPage() {
             <Crown size={24} />
 
             <div>
-              <h2>2. Bonus antes del Mundial</h2>
+              <h2>4. Bonus antes del Mundial</h2>
 
               <p>
                 Estos pronósticos se hacen una sola vez y se bloquean cuando
@@ -228,7 +281,7 @@ export default function ReglasPage() {
                   <strong>8 puntos</strong> si tu campeón queda subcampeón.
                 </li>
                 <li>
-                  <strong>4 puntos</strong> si tu campeón llega a semifinales.
+                  <strong>4 puntos</strong> si llega a semifinales.
                 </li>
               </ul>
             </article>
@@ -257,15 +310,14 @@ export default function ReglasPage() {
                 <span>Bota de Oro</span>
               </div>
 
-              <h3>Máximo goleador del Mundial</h3>
+              <h3>Máximo goleador</h3>
 
               <ul>
                 <li>
                   <strong>14 puntos</strong> si aciertas el máximo goleador.
                 </li>
                 <li>
-                  <strong>5 puntos</strong> si tu jugador queda en el top 3 de
-                  goleadores.
+                  <strong>5 puntos</strong> si tu jugador queda en el top 3.
                 </li>
               </ul>
             </article>
@@ -273,72 +325,20 @@ export default function ReglasPage() {
             <article className="bonusItem player">
               <div className="bonusTop">
                 <Star size={22} />
-                <span>Premios individuales</span>
+                <span>Premios</span>
               </div>
 
-              <h3>Mejor jugador y mejor portero</h3>
+              <h3>Mejor jugador y portero</h3>
 
               <ul>
                 <li>
-                  <strong>10 puntos</strong> por acertar el mejor jugador del
-                  Mundial.
+                  <strong>10 puntos</strong> por acertar el mejor jugador.
                 </li>
                 <li>
-                  <strong>8 puntos</strong> por acertar el mejor portero del
-                  Mundial.
+                  <strong>8 puntos</strong> por acertar el mejor portero.
                 </li>
               </ul>
             </article>
-          </div>
-        </section>
-
-        <section className="mainCard">
-          <div className="sectionHeader">
-            <Users size={24} />
-
-            <div>
-              <h2>3. Clasificados de grupo</h2>
-
-              <p>
-                Antes de empezar el Mundial, pronostica qué selecciones pasarán
-                de cada grupo.
-              </p>
-            </div>
-          </div>
-
-          <div className="groupScoring">
-            <div className="scoreLine">
-              <div>
-                <strong>2 puntos</strong>
-                <span>por cada selección acertada</span>
-              </div>
-            </div>
-
-            <div className="scoreLine">
-              <div>
-                <strong>+1 punto</strong>
-                <span>si aciertas los 2 clasificados del grupo</span>
-              </div>
-            </div>
-
-            <div className="scoreLine">
-              <div>
-                <strong>+1 punto adicional</strong>
-                <span>si aciertas también el orden exacto</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="exampleWide">
-            <div>
-              <strong>Ejemplo</strong>
-
-              <p>
-                Si en un grupo pasan España y Japón, y tú pronosticas España 1ª
-                y Japón 2ª, sumarías 2 + 2 + 1 + 1 ={" "}
-                <b>6 puntos</b>.
-              </p>
-            </div>
           </div>
         </section>
 
@@ -347,11 +347,11 @@ export default function ReglasPage() {
             <Flame size={24} />
 
             <div>
-              <h2>4. Bonus especiales</h2>
+              <h2>5. Bonus especiales</h2>
 
               <p>
-                Apuestas con más riesgo, más conversación y mucho potencial para
-                cambiar el ranking.
+                Apuestas sencillas, con mucho pique y capaces de mover el
+                ranking.
               </p>
             </div>
           </div>
@@ -375,7 +375,7 @@ export default function ReglasPage() {
                   <strong>14 puntos</strong> si pasa la fase de grupos.
                 </li>
                 <li>
-                  <strong>+5 puntos</strong> si llega a cuartos de final.
+                  <strong>+5 puntos</strong> si llega a cuartos.
                 </li>
               </ul>
             </article>
@@ -410,37 +410,13 @@ export default function ReglasPage() {
               <h3>Bonus final</h3>
 
               <p>
-                Si aciertas el campeón del Mundial y además aciertas al menos un
-                finalista, recibes un extra.
+                Si aciertas el campeón y además al menos un finalista, recibes
+                un extra.
               </p>
 
               <ul>
                 <li>
                   <strong>+5 puntos</strong> de bonus.
-                </li>
-              </ul>
-            </article>
-
-            <article className="specialItem penalties">
-              <div className="bonusTop">
-                <Zap size={22} />
-                <span>Penaltis</span>
-              </div>
-
-              <h3>Extras en eliminatorias</h3>
-
-              <p>
-                En los partidos de eliminatoria podrás pronosticar si habrá
-                tanda de penaltis.
-              </p>
-
-              <ul>
-                <li>
-                  <strong>3 puntos</strong> si aciertas que habrá penaltis.
-                </li>
-                <li>
-                  <strong>+2 puntos</strong> si además aciertas el ganador por
-                  penaltis.
                 </li>
               </ul>
             </article>
@@ -452,19 +428,23 @@ export default function ReglasPage() {
             <CalendarClock size={24} />
 
             <div>
-              <h2>5. Cuándo se bloquean los pronósticos</h2>
+              <h2>6. Cuándo se bloquean</h2>
 
               <p>
-                Para que la competición sea justa, cada tipo de pronóstico tiene
-                su propio momento de cierre.
+                Para que sea justo, cada pronóstico tiene un momento de cierre.
               </p>
             </div>
           </div>
 
           <div className="lockList">
             <div className="lockRow">
-              <span>Partidos</span>
+              <span>Partidos de fase de grupos</span>
               <strong>Hasta el inicio de cada partido</strong>
+            </div>
+
+            <div className="lockRow">
+              <span>Eliminatorias</span>
+              <strong>Hasta el inicio de cada eliminatoria</strong>
             </div>
 
             <div className="lockRow">
@@ -473,29 +453,23 @@ export default function ReglasPage() {
             </div>
 
             <div className="lockRow">
-              <span>Campeón y finalistas</span>
+              <span>Campeón, finalistas y bonus</span>
               <strong>Hasta el primer partido del Mundial</strong>
             </div>
+          </div>
+        </section>
 
-            <div className="lockRow">
-              <span>Bota de Oro</span>
-              <strong>Hasta el primer partido del Mundial</strong>
-            </div>
+        <section className="whyCard">
+          <div className="whyTop">
+            <Sparkles size={26} />
+            <h2>Por qué este sistema engancha</h2>
+          </div>
 
-            <div className="lockRow">
-              <span>Mejor jugador y mejor portero</span>
-              <strong>Hasta el primer partido del Mundial</strong>
-            </div>
-
-            <div className="lockRow">
-              <span>Revelación y decepción</span>
-              <strong>Hasta el primer partido del Mundial</strong>
-            </div>
-
-            <div className="lockRow">
-              <span>Penaltis</span>
-              <strong>Hasta el inicio de cada eliminatoria</strong>
-            </div>
+          <div className="whyGrid">
+            <div className="whyItem">⚡ Fase de grupos rápida</div>
+            <div className="whyItem">🎯 Eliminatorias más intensas</div>
+            <div className="whyItem">🔥 Bonus para remontar</div>
+            <div className="whyItem">🏆 Emoción hasta la final</div>
           </div>
         </section>
 
@@ -505,12 +479,12 @@ export default function ReglasPage() {
           </div>
 
           <div>
-            <h2>Siempre puedes remontar</h2>
+            <h2>En esta porra nunca estás fuera</h2>
 
             <p>
-              Aunque empieces mal, la porra sigue viva. Los clasificados, las
-              eliminatorias, la Bota de Oro, los finalistas, el campeón y los
-              bonus finales pueden cambiar el ranking hasta el último partido.
+              Aunque empieces mal, los clasificados, las eliminatorias, la Bota
+              de Oro, los finalistas, el campeón y los bonus finales pueden
+              cambiar el ranking hasta el último partido.
             </p>
           </div>
         </section>
@@ -585,7 +559,7 @@ export default function ReglasPage() {
           color: #cbd5e1;
           font-size: 16px;
           line-height: 1.65;
-          max-width: 820px;
+          max-width: 800px;
         }
 
         .summaryGrid {
@@ -645,7 +619,9 @@ export default function ReglasPage() {
           font-size: 14px;
         }
 
-        .mainCard {
+        .mainCard,
+        .whyCard,
+        .comebackCard {
           background: rgba(15,23,42,0.74);
           border: 1px solid rgba(255,255,255,0.08);
           border-radius: 32px;
@@ -668,7 +644,9 @@ export default function ReglasPage() {
           margin-top: 4px;
         }
 
-        .sectionHeader h2 {
+        .sectionHeader h2,
+        .whyTop h2,
+        .comebackCard h2 {
           margin: 0;
           font-size: 29px;
           line-height: 1.12;
@@ -682,12 +660,95 @@ export default function ReglasPage() {
           line-height: 1.55;
         }
 
+        .oneXTwoGrid,
+        .groupScoring {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .choiceCard,
+        .scoreLine {
+          border-radius: 24px;
+          padding: 22px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .choiceCard span {
+          width: 48px;
+          height: 48px;
+          border-radius: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 26px;
+          font-weight: 950;
+          margin-bottom: 14px;
+          background: rgba(255,255,255,0.1);
+        }
+
+        .choiceCard h3 {
+          margin: 0 0 8px;
+          font-size: 21px;
+          font-weight: 950;
+        }
+
+        .choiceCard p {
+          margin: 0;
+          color: #cbd5e1;
+          line-height: 1.5;
+        }
+
+        .choiceCard.home {
+          border-color: rgba(34,197,94,0.28);
+          background: rgba(34,197,94,0.08);
+        }
+
+        .choiceCard.draw {
+          border-color: rgba(250,204,21,0.28);
+          background: rgba(250,204,21,0.08);
+        }
+
+        .choiceCard.away {
+          border-color: rgba(59,130,246,0.28);
+          background: rgba(59,130,246,0.08);
+        }
+
+        .pointsBanner {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          border-radius: 22px;
+          padding: 18px 20px;
+          background:
+            linear-gradient(135deg, rgba(250,204,21,0.16), rgba(37,99,235,0.14));
+          border: 1px solid rgba(250,204,21,0.2);
+        }
+
+        .pointsBanner strong {
+          color: #fef3c7;
+          font-size: 26px;
+          font-weight: 950;
+          white-space: nowrap;
+        }
+
+        .pointsBanner span {
+          color: #dbeafe;
+          font-weight: 800;
+        }
+
         .rulesGrid,
         .bonusGrid,
         .specialGrid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 18px;
+        }
+
+        .specialGrid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .ruleCard,
@@ -702,7 +763,9 @@ export default function ReglasPage() {
 
         .ruleCard:hover,
         .bonusItem:hover,
-        .specialItem:hover {
+        .specialItem:hover,
+        .choiceCard:hover,
+        .scoreLine:hover {
           transform: translateY(-3px);
           border-color: rgba(255,255,255,0.16);
           background: rgba(255,255,255,0.06);
@@ -718,16 +781,6 @@ export default function ReglasPage() {
           background: rgba(34,197,94,0.08);
         }
 
-        .ruleCard.diff {
-          border-color: rgba(59,130,246,0.34);
-          background: rgba(59,130,246,0.08);
-        }
-
-        .ruleCard.fail {
-          border-color: rgba(239,68,68,0.28);
-          background: rgba(239,68,68,0.08);
-        }
-
         .ruleTop,
         .bonusTop {
           display: inline-flex;
@@ -741,13 +794,10 @@ export default function ReglasPage() {
           margin-bottom: 16px;
         }
 
-        .bonusTop {
-          color: #e2e8f0;
-        }
-
         .ruleCard h3,
         .bonusItem h3,
-        .specialItem h3 {
+        .specialItem h3,
+        .tieCard h3 {
           margin: 0 0 10px;
           font-size: 23px;
           line-height: 1.15;
@@ -756,10 +806,130 @@ export default function ReglasPage() {
         }
 
         .ruleCard p,
-        .specialItem p {
+        .specialItem p,
+        .tieCard p {
           margin: 0 0 18px;
           color: #cbd5e1;
           line-height: 1.6;
+        }
+
+        .tieCard {
+          display: flex;
+          gap: 16px;
+          margin-top: 18px;
+          border-radius: 26px;
+          padding: 22px;
+          background:
+            linear-gradient(135deg, rgba(59,130,246,0.14), rgba(2,6,23,0.38));
+          border: 1px solid rgba(96,165,250,0.22);
+        }
+
+        .tieIcon {
+          width: 50px;
+          height: 50px;
+          border-radius: 18px;
+          background: rgba(59,130,246,0.18);
+          color: #93c5fd;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .tieCard strong {
+          color: #fef3c7;
+        }
+
+        .tieExample {
+          display: inline-flex;
+          flex-direction: column;
+          gap: 5px;
+          border-radius: 18px;
+          padding: 14px 16px;
+          background: rgba(2,6,23,0.38);
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .tieExample span {
+          color: #94a3b8;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          font-weight: 900;
+        }
+
+        .example {
+          background: rgba(2,6,23,0.45);
+          border-radius: 18px;
+          padding: 16px;
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .example strong,
+        .exampleWide strong {
+          display: block;
+          margin-bottom: 10px;
+          color: #94a3b8;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          font-size: 12px;
+        }
+
+        .exampleMatch {
+          font-size: 20px;
+          font-weight: 950;
+          margin-bottom: 12px;
+        }
+
+        .exampleResult {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 10px 14px;
+          font-weight: 950;
+          font-size: 14px;
+        }
+
+        .exampleResult.success {
+          background: rgba(250,204,21,0.18);
+          color: #fde68a;
+        }
+
+        .exampleResult.partial {
+          background: rgba(34,197,94,0.18);
+          color: #86efac;
+        }
+
+        .scoreLine strong {
+          display: block;
+          font-size: 25px;
+          font-weight: 950;
+          color: #fef3c7;
+          margin-bottom: 6px;
+        }
+
+        .scoreLine span {
+          display: block;
+          color: #cbd5e1;
+          line-height: 1.45;
+        }
+
+        .exampleWide {
+          border-radius: 22px;
+          padding: 20px;
+          background:
+            linear-gradient(135deg, rgba(37,99,235,0.16), rgba(2,6,23,0.36));
+          border: 1px solid rgba(96,165,250,0.2);
+        }
+
+        .exampleWide p {
+          margin: 0;
+          color: #dbeafe;
+          line-height: 1.65;
+        }
+
+        .exampleWide b {
+          color: #fef3c7;
         }
 
         .bonusItem ul,
@@ -821,109 +991,6 @@ export default function ReglasPage() {
           background: rgba(250,204,21,0.07);
         }
 
-        .penalties {
-          border-color: rgba(14,165,233,0.32);
-          background: rgba(14,165,233,0.08);
-        }
-
-        .example {
-          background: rgba(2,6,23,0.45);
-          border-radius: 18px;
-          padding: 16px;
-          border: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .example strong,
-        .exampleWide strong {
-          display: block;
-          margin-bottom: 10px;
-          color: #94a3b8;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          font-size: 12px;
-        }
-
-        .exampleMatch {
-          font-size: 20px;
-          font-weight: 950;
-          margin-bottom: 12px;
-        }
-
-        .exampleResult {
-          display: inline-flex;
-          align-items: center;
-          border-radius: 999px;
-          padding: 10px 14px;
-          font-weight: 950;
-          font-size: 14px;
-        }
-
-        .exampleResult.success {
-          background: rgba(250,204,21,0.18);
-          color: #fde68a;
-        }
-
-        .exampleResult.partial {
-          background: rgba(34,197,94,0.18);
-          color: #86efac;
-        }
-
-        .exampleResult.neutral {
-          background: rgba(59,130,246,0.18);
-          color: #93c5fd;
-        }
-
-        .failResult {
-          background: rgba(239,68,68,0.18);
-          color: #fca5a5;
-        }
-
-        .groupScoring {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-
-        .scoreLine {
-          border-radius: 22px;
-          padding: 20px;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        .scoreLine strong {
-          display: block;
-          font-size: 25px;
-          font-weight: 950;
-          color: #fef3c7;
-          margin-bottom: 6px;
-        }
-
-        .scoreLine span {
-          display: block;
-          color: #cbd5e1;
-          line-height: 1.45;
-        }
-
-        .exampleWide {
-          border-radius: 22px;
-          padding: 20px;
-          background:
-            linear-gradient(135deg, rgba(37,99,235,0.16), rgba(2,6,23,0.36));
-          border: 1px solid rgba(96,165,250,0.2);
-        }
-
-        .exampleWide p {
-          margin: 0;
-          color: #dbeafe;
-          line-height: 1.65;
-        }
-
-        .exampleWide b {
-          color: #fef3c7;
-        }
-
         .lockList {
           display: grid;
           gap: 10px;
@@ -951,17 +1018,47 @@ export default function ReglasPage() {
           text-align: right;
         }
 
+        .whyCard {
+          background:
+            linear-gradient(135deg, rgba(37,99,235,0.16), rgba(250,204,21,0.08)),
+            rgba(15,23,42,0.78);
+        }
+
+        .whyTop {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+
+        .whyTop svg {
+          color: #facc15;
+        }
+
+        .whyGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .whyItem {
+          padding: 16px;
+          border-radius: 18px;
+          background: rgba(2,6,23,0.34);
+          border: 1px solid rgba(255,255,255,0.06);
+          color: #e2e8f0;
+          font-weight: 900;
+          text-align: center;
+        }
+
         .comebackCard {
           display: flex;
           align-items: center;
           gap: 18px;
-          border-radius: 34px;
-          padding: 28px;
           background:
             linear-gradient(135deg, rgba(250,204,21,0.18), rgba(37,99,235,0.16)),
             rgba(15,23,42,0.78);
           border: 1px solid rgba(250,204,21,0.22);
-          box-shadow: 0 28px 90px rgba(0,0,0,0.22);
         }
 
         .comebackIcon {
@@ -976,29 +1073,29 @@ export default function ReglasPage() {
           flex-shrink: 0;
         }
 
-        .comebackCard h2 {
-          margin: 0 0 8px;
-          font-size: 30px;
-          font-weight: 950;
-          letter-spacing: -0.6px;
-        }
-
         .comebackCard p {
-          margin: 0;
+          margin: 8px 0 0;
           color: #e2e8f0;
           line-height: 1.65;
           max-width: 850px;
         }
 
-        @media (max-width: 960px) {
+        @media (max-width: 1020px) {
           .summaryGrid,
-          .groupScoring {
+          .oneXTwoGrid,
+          .groupScoring,
+          .whyGrid {
             grid-template-columns: 1fr;
           }
 
-          .rulesGrid,
-          .bonusGrid,
           .specialGrid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 960px) {
+          .rulesGrid,
+          .bonusGrid {
             grid-template-columns: 1fr;
           }
         }
@@ -1029,6 +1126,7 @@ export default function ReglasPage() {
           }
 
           .mainCard,
+          .whyCard,
           .comebackCard {
             padding: 20px;
             border-radius: 26px;
@@ -1037,23 +1135,38 @@ export default function ReglasPage() {
           .summaryCard,
           .ruleCard,
           .bonusItem,
-          .specialItem {
+          .specialItem,
+          .choiceCard,
+          .scoreLine {
             padding: 18px;
             border-radius: 22px;
           }
 
-          .sectionHeader h2 {
+          .sectionHeader h2,
+          .whyTop h2,
+          .comebackCard h2 {
             font-size: 24px;
           }
 
           .ruleCard h3,
           .bonusItem h3,
-          .specialItem h3 {
+          .specialItem h3,
+          .tieCard h3 {
             font-size: 21px;
           }
 
           .exampleMatch {
             font-size: 18px;
+          }
+
+          .pointsBanner {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .tieCard {
+            flex-direction: column;
+            padding: 18px;
           }
 
           .lockRow {
@@ -1074,10 +1187,6 @@ export default function ReglasPage() {
             width: 54px;
             height: 54px;
             border-radius: 20px;
-          }
-
-          .comebackCard h2 {
-            font-size: 24px;
           }
         }
       `}</style>
