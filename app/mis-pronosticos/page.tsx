@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -15,6 +16,8 @@ import {
   Target,
   Trophy,
   AlertTriangle,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 
 import PhaseBadge from "@/components/PhaseBadge";
@@ -61,6 +64,18 @@ type QueryResult<T> = {
   error: { message: string } | null;
 };
 
+type BonusResumen = {
+  id: number;
+  campeon: string | null;
+  finalista_1: string | null;
+  finalista_2: string | null;
+  bota_oro: string | null;
+  mejor_jugador: string | null;
+  mejor_portero: string | null;
+  seleccion_revelacion: string | null;
+  seleccion_decepcion: string | null;
+};
+
 const filtros: Filtro[] = [
   "Todos",
   "Pendientes",
@@ -97,6 +112,7 @@ export default function MisPronosticosPage() {
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [bonusResumen, setBonusResumen] = useState<BonusResumen | null>(null);
 
   useEffect(() => {
     cargarDatos();
@@ -115,6 +131,7 @@ export default function MisPronosticosPage() {
         setPartidos([]);
         setPronosticos({});
         setPronosticosGuardados({});
+        setBonusResumen(null);
         return;
       }
 
@@ -122,14 +139,17 @@ export default function MisPronosticosPage() {
         supabase
           .from("partidos")
           .select(
-            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase, resultado_local, resultado_visitante"
+            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase, resultado_local, resultado_visitante",
           )
           .order("fecha_inicio", { ascending: true, nullsFirst: false }),
         queryTimeout<Partido[]>(),
       ])) as QueryResult<Partido[]>;
 
       if (partidosResponse.error) {
-        console.error("Error cargando partidos:", partidosResponse.error.message);
+        console.error(
+          "Error cargando partidos:",
+          partidosResponse.error.message,
+        );
         setErrorCarga(partidosResponse.error.message);
         setPartidos([]);
         return;
@@ -146,7 +166,7 @@ export default function MisPronosticosPage() {
       if (pronosticosResponse.error) {
         console.error(
           "Error cargando pronósticos:",
-          pronosticosResponse.error.message
+          pronosticosResponse.error.message,
         );
         setErrorCarga(pronosticosResponse.error.message);
         setPronosticos({});
@@ -155,7 +175,26 @@ export default function MisPronosticosPage() {
         return;
       }
 
-      const iniciales: Record<number, { local: string; visitante: string }> = {};
+      const bonusResponse = (await Promise.race([
+        supabase
+          .from("pronosticos_bonus")
+          .select(
+            "id, campeon, finalista_1, finalista_2, bota_oro, mejor_jugador, mejor_portero, seleccion_revelacion, seleccion_decepcion",
+          )
+          .eq("participante_id", participanteActual.id)
+          .maybeSingle(),
+        queryTimeout<BonusResumen | null>(),
+      ])) as QueryResult<BonusResumen | null>;
+
+      if (bonusResponse.error) {
+        console.error("Error cargando bonus:", bonusResponse.error.message);
+        setBonusResumen(null);
+      } else {
+        setBonusResumen(bonusResponse.data);
+      }
+
+      const iniciales: Record<number, { local: string; visitante: string }> =
+        {};
       const guardados: Record<number, Pronostico> = {};
 
       (pronosticosResponse.data ?? []).forEach((pronostico) => {
@@ -182,6 +221,7 @@ export default function MisPronosticosPage() {
       setPartidos([]);
       setPronosticos({});
       setPronosticosGuardados({});
+      setBonusResumen(null);
     } finally {
       setCargando(false);
     }
@@ -290,13 +330,27 @@ export default function MisPronosticosPage() {
   const totalGuardados = Object.keys(pronosticosGuardados).length;
   const totalPendientes = Math.max(partidos.length - totalGuardados, 0);
   const totalAbiertos = partidos.filter(
-    (partido) => !partidoBloqueado(partido)
+    (partido) => !partidoBloqueado(partido),
   ).length;
+  const totalCamposBonus = 8;
+  const bonusCompletados = bonusResumen
+    ? [
+        bonusResumen.campeon,
+        bonusResumen.finalista_1,
+        bonusResumen.finalista_2,
+        bonusResumen.bota_oro,
+        bonusResumen.mejor_jugador,
+        bonusResumen.mejor_portero,
+        bonusResumen.seleccion_revelacion,
+        bonusResumen.seleccion_decepcion,
+      ].filter((valor) => valor && valor.trim().length > 0).length
+    : 0;
+  const bonusGuardados = Boolean(bonusResumen);
 
   function actualizarPronostico(
     partidoId: number,
     campo: "local" | "visitante",
-    valor: string
+    valor: string,
   ) {
     if (valor !== "" && !/^\d+$/.test(valor)) return;
 
@@ -428,7 +482,10 @@ export default function MisPronosticosPage() {
 
           <div>
             <h1>Mis pronósticos</h1>
-            <p>Guarda o modifica tus predicciones antes de que empiece cada partido</p>
+            <p>
+              Guarda o modifica tus predicciones antes de que empiece cada
+              partido
+            </p>
           </div>
         </div>
 
@@ -442,7 +499,9 @@ export default function MisPronosticosPage() {
         <div className="summaryBox">
           <div>
             <p className="summaryLabel">Participante</p>
-            <strong>{participante.nickname || participante.nombre || "Usuario"}</strong>
+            <strong>
+              {participante.nickname || participante.nombre || "Usuario"}
+            </strong>
           </div>
 
           <div>
@@ -462,6 +521,46 @@ export default function MisPronosticosPage() {
             <strong>{totalAbiertos}</strong>
           </div>
         </div>
+
+        <Link href="/bonus" className="bonusCard">
+          <div className="bonusIcon">
+            <Sparkles size={24} />
+          </div>
+
+          <div className="bonusContent">
+            <div className="bonusTopLine">
+              <span>Bonus del Mundial</span>
+              <strong
+                className={bonusGuardados ? "bonusSaved" : "bonusPending"}
+              >
+                {bonusGuardados ? "Bonus guardados" : "Pendiente"}
+              </strong>
+            </div>
+
+            <p>
+              Campeón, finalistas, Bota de Oro, mejor jugador, mejor portero,
+              selección revelación y selección decepción.
+            </p>
+
+            <div className="bonusProgressRow">
+              <div className="bonusProgressBar">
+                <span
+                  style={{
+                    width: `${Math.round((bonusCompletados / totalCamposBonus) * 100)}%`,
+                  }}
+                />
+              </div>
+              <em>
+                {bonusCompletados}/{totalCamposBonus} completados
+              </em>
+            </div>
+          </div>
+
+          <div className="bonusCta">
+            {bonusGuardados ? "Editar bonus" : "Ir a bonus"}
+            <ArrowRight size={18} />
+          </div>
+        </Link>
 
         <div className="filtersWrapper">
           <div className="searchBox">
@@ -593,7 +692,7 @@ export default function MisPronosticosPage() {
                           actualizarPronostico(
                             partido.id,
                             "local",
-                            event.target.value
+                            event.target.value,
                           )
                         }
                       />
@@ -613,7 +712,7 @@ export default function MisPronosticosPage() {
                           actualizarPronostico(
                             partido.id,
                             "visitante",
-                            event.target.value
+                            event.target.value,
                           )
                         }
                       />
@@ -623,7 +722,8 @@ export default function MisPronosticosPage() {
                   {bloqueado && (
                     <div className="lockedHint">
                       <Lock size={15} />
-                      Este partido ya empezó. El pronóstico no se puede modificar.
+                      Este partido ya empezó. El pronóstico no se puede
+                      modificar.
                     </div>
                   )}
                 </div>
@@ -786,6 +886,124 @@ function Styles() {
       .summaryBox strong {
         font-size: 22px;
         font-weight: 900;
+      }
+
+      .bonusCard {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 18px;
+        padding: 18px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(15,23,42,0.78));
+        border: 1px solid rgba(16,185,129,0.28);
+        color: white;
+        text-decoration: none;
+        box-shadow: 0 18px 40px rgba(2,6,23,0.22);
+      }
+
+      .bonusCard:hover {
+        border-color: rgba(16,185,129,0.50);
+        background: linear-gradient(135deg, rgba(16,185,129,0.24), rgba(15,23,42,0.84));
+      }
+
+      .bonusIcon {
+        width: 56px;
+        height: 56px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(16,185,129,0.18);
+        color: #6ee7b7;
+        flex-shrink: 0;
+      }
+
+      .bonusContent {
+        min-width: 0;
+      }
+
+      .bonusTopLine {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+
+      .bonusTopLine span {
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .bonusTopLine strong {
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .bonusSaved {
+        background: rgba(34,197,94,0.18);
+        color: #86efac;
+      }
+
+      .bonusPending {
+        background: rgba(250,204,21,0.16);
+        color: #fde68a;
+      }
+
+      .bonusContent p {
+        margin: 0;
+        color: #cbd5e1;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      .bonusProgressRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .bonusProgressBar {
+        height: 8px;
+        max-width: 240px;
+        flex: 1;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.10);
+      }
+
+      .bonusProgressBar span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: #34d399;
+      }
+
+      .bonusProgressRow em {
+        color: #94a3b8;
+        font-size: 12px;
+        font-style: normal;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .bonusCta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 16px;
+        background: #10b981;
+        color: #022c22;
+        padding: 12px 16px;
+        font-weight: 900;
+        white-space: nowrap;
       }
 
       .filtersWrapper {
@@ -1202,6 +1420,33 @@ function Styles() {
       }
 
       @media (max-width: 760px) {
+        .bonusCard {
+          grid-template-columns: 1fr;
+          align-items: stretch;
+          gap: 12px;
+          padding: 16px;
+        }
+
+        .bonusIcon {
+          width: 48px;
+          height: 48px;
+          border-radius: 17px;
+        }
+
+        .bonusCta {
+          width: 100%;
+        }
+
+        .bonusProgressRow {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .bonusProgressBar {
+          width: 100%;
+          max-width: none;
+        }
+
         .header h1 {
           font-size: 34px;
         }

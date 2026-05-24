@@ -1,5 +1,4 @@
 import {
-  Award,
   CalendarClock,
   CheckCircle2,
   Crown,
@@ -46,7 +45,6 @@ export default function ReglasPage() {
             </div>
 
             <span>Fase de grupos</span>
-
             <strong>Pronóstico rápido 1X2</strong>
 
             <p>
@@ -61,7 +59,6 @@ export default function ReglasPage() {
             </div>
 
             <span>Eliminatorias</span>
-
             <strong>Resultado exacto</strong>
 
             <p>
@@ -76,7 +73,6 @@ export default function ReglasPage() {
             </div>
 
             <span>Bonus Mundial</span>
-
             <strong>Emoción hasta la final</strong>
 
             <p>
@@ -400,26 +396,6 @@ export default function ReglasPage() {
                 </li>
               </ul>
             </article>
-
-            <article className="specialItem fullChampion">
-              <div className="bonusTop">
-                <Award size={22} />
-                <span>Pleno del Campeón</span>
-              </div>
-
-              <h3>Bonus final</h3>
-
-              <p>
-                Si aciertas el campeón y además al menos un finalista, recibes
-                un extra.
-              </p>
-
-              <ul>
-                <li>
-                  <strong>+5 puntos</strong> de bonus.
-                </li>
-              </ul>
-            </article>
           </div>
         </section>
 
@@ -674,6 +650,14 @@ export default function ReglasPage() {
           padding: 22px;
           background: rgba(255,255,255,0.05);
           border: 1px solid rgba(255,255,255,0.08);
+          transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+        }
+
+        .choiceCard:hover,
+        .scoreLine:hover {
+          transform: translateY(-3px);
+          border-color: rgba(255,255,255,0.16);
+          background: rgba(255,255,255,0.06);
         }
 
         .choiceCard span {
@@ -743,12 +727,13 @@ export default function ReglasPage() {
         .bonusGrid,
         .specialGrid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 18px;
         }
 
+        .rulesGrid,
+        .bonusGrid,
         .specialGrid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .ruleCard,
@@ -763,9 +748,7 @@ export default function ReglasPage() {
 
         .ruleCard:hover,
         .bonusItem:hover,
-        .specialItem:hover,
-        .choiceCard:hover,
-        .scoreLine:hover {
+        .specialItem:hover {
           transform: translateY(-3px);
           border-color: rgba(255,255,255,0.16);
           background: rgba(255,255,255,0.06);
@@ -986,11 +969,6 @@ export default function ReglasPage() {
           background: rgba(239,68,68,0.08);
         }
 
-        .fullChampion {
-          border-color: rgba(250,204,21,0.3);
-          background: rgba(250,204,21,0.07);
-        }
-
         .lockList {
           display: grid;
           gap: 10px;
@@ -1087,15 +1065,12 @@ export default function ReglasPage() {
           .whyGrid {
             grid-template-columns: 1fr;
           }
-
-          .specialGrid {
-            grid-template-columns: 1fr;
-          }
         }
 
         @media (max-width: 960px) {
           .rulesGrid,
-          .bonusGrid {
+          .bonusGrid,
+          .specialGrid {
             grid-template-columns: 1fr;
           }
         }
