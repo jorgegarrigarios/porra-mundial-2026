@@ -1,26 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Shield, Trophy, Lock, CalendarDays } from "lucide-react";
+import { Save, Shield, Trophy, Lock, CalendarDays, Award } from "lucide-react";
 
-import { supabase } from "@/lib/supabase";
-import { calcularPuntos } from "@/lib/puntos";
 import { obtenerParticipanteActual } from "@/lib/participante";
+import { recalcularPuntos } from "@/lib/recalcularPuntos";
+import { supabase } from "@/lib/supabase";
 
 type Partido = {
   id: number;
   local: string;
   visitante: string;
+  fase: string | null;
   resultado_local: number | null;
   resultado_visitante: number | null;
   fecha_inicio: string | null;
-};
-
-type Pronostico = {
-  id: number;
-  partido_id: number;
-  goles_local: number | null;
-  goles_visitante: number | null;
+  clasificado_real: string | null;
 };
 
 type Participante = {
@@ -31,13 +26,27 @@ type Participante = {
   role?: string | null;
 };
 
+type ValoresPartido = {
+  local: string;
+  visitante: string;
+  fechaInicio: string;
+  clasificadoReal: string;
+};
+
+function esEliminatoria(fase: string | null) {
+  return fase?.trim().toLowerCase() !== "fase de grupos";
+}
+
+function normalizarTexto(valor: string) {
+  const limpio = valor.trim();
+  return limpio.length > 0 ? limpio : null;
+}
+
 export default function AdminResultadosPage() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [usuario, setUsuario] = useState<Participante | null>(null);
 
-  const [valores, setValores] = useState<
-    Record<number, { local: string; visitante: string; fechaInicio: string }>
-  >({});
+  const [valores, setValores] = useState<Record<number, ValoresPartido>>({});
 
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
@@ -69,14 +78,11 @@ export default function AdminResultadosPage() {
       return;
     }
 
-    setPartidos(data ?? []);
+    setPartidos((data ?? []) as Partido[]);
 
-    const iniciales: Record<
-      number,
-      { local: string; visitante: string; fechaInicio: string }
-    > = {};
+    const iniciales: Record<number, ValoresPartido> = {};
 
-    (data ?? []).forEach((p: Partido) => {
+    ((data ?? []) as Partido[]).forEach((p) => {
       iniciales[p.id] = {
         local: p.resultado_local !== null ? p.resultado_local.toString() : "",
         visitante:
@@ -86,6 +92,7 @@ export default function AdminResultadosPage() {
         fechaInicio: p.fecha_inicio
           ? new Date(p.fecha_inicio).toISOString().slice(0, 16)
           : "",
+        clasificadoReal: p.clasificado_real ?? "",
       };
     });
 
@@ -100,13 +107,15 @@ export default function AdminResultadosPage() {
       const local = valores[partido.id]?.local ?? "";
       const visitante = valores[partido.id]?.visitante ?? "";
       const fechaInicio = valores[partido.id]?.fechaInicio ?? "";
+      const clasificadoReal = valores[partido.id]?.clasificadoReal ?? "";
 
       const resultadoLocal = local === "" ? null : Number(local);
       const resultadoVisitante = visitante === "" ? null : Number(visitante);
+      const clasificadoRealLimpio = normalizarTexto(clasificadoReal);
 
       if (
         resultadoLocal !== null &&
-        (Number.isNaN(resultadoLocal) || resultadoLocal < 0)
+        (!Number.isInteger(resultadoLocal) || resultadoLocal < 0)
       ) {
         alert("Resultado local no válido.");
         return;
@@ -114,9 +123,20 @@ export default function AdminResultadosPage() {
 
       if (
         resultadoVisitante !== null &&
-        (Number.isNaN(resultadoVisitante) || resultadoVisitante < 0)
+        (!Number.isInteger(resultadoVisitante) || resultadoVisitante < 0)
       ) {
         alert("Resultado visitante no válido.");
+        return;
+      }
+
+      if (
+        esEliminatoria(partido.fase) &&
+        resultadoLocal !== null &&
+        resultadoVisitante !== null &&
+        resultadoLocal === resultadoVisitante &&
+        !clasificadoRealLimpio
+      ) {
+        alert("En una eliminatoria empatada debes indicar quién se clasifica.");
         return;
       }
 
@@ -126,6 +146,7 @@ export default function AdminResultadosPage() {
           resultado_local: resultadoLocal,
           resultado_visitante: resultadoVisitante,
           fecha_inicio: fechaInicio ? new Date(fechaInicio).toISOString() : null,
+          clasificado_real: clasificadoRealLimpio,
         })
         .eq("id", partido.id);
 
@@ -135,55 +156,7 @@ export default function AdminResultadosPage() {
         return;
       }
 
-      const { data: pronosticos, error: errorPronosticos } = await supabase
-        .from("pronosticos")
-        .select("id, partido_id, goles_local, goles_visitante")
-        .eq("partido_id", partido.id);
-
-      if (errorPronosticos) {
-        console.error("Error cargando pronósticos:", errorPronosticos.message);
-        alert(
-          "Resultado guardado, pero no se pudieron cargar pronósticos: " +
-            errorPronosticos.message
-        );
-        return;
-      }
-
-      let actualizados = 0;
-      let errores = 0;
-
-      if (resultadoLocal !== null && resultadoVisitante !== null) {
-        for (const pronostico of (pronosticos ?? []) as Pronostico[]) {
-          if (
-            pronostico.goles_local === null ||
-            pronostico.goles_visitante === null
-          ) {
-            continue;
-          }
-
-          const puntos = calcularPuntos(
-            pronostico.goles_local,
-            pronostico.goles_visitante,
-            resultadoLocal,
-            resultadoVisitante
-          );
-
-          const { error: errorUpdate } = await supabase
-            .from("pronosticos")
-            .update({ puntos })
-            .eq("id", pronostico.id);
-
-          if (errorUpdate) {
-            errores++;
-            console.error(
-              `Error actualizando pronóstico ${pronostico.id}:`,
-              errorUpdate.message
-            );
-          } else {
-            actualizados++;
-          }
-        }
-      }
+      await recalcularPuntos();
 
       setPartidos((prev) =>
         prev.map((p) =>
@@ -195,19 +168,13 @@ export default function AdminResultadosPage() {
                 fecha_inicio: fechaInicio
                   ? new Date(fechaInicio).toISOString()
                   : null,
+                clasificado_real: clasificadoRealLimpio,
               }
             : p
         )
       );
 
-      if (errores > 0) {
-        alert(
-          `Partido guardado, pero hubo ${errores} error(es) actualizando puntos.`
-        );
-        return;
-      }
-
-      alert(`Partido guardado. Pronósticos actualizados: ${actualizados}`);
+      alert("Partido guardado y ranking V1.2 recalculado.");
     } catch (error) {
       console.error("Error inesperado:", error);
       alert("Error inesperado guardando el partido.");
@@ -259,92 +226,137 @@ export default function AdminResultadosPage() {
 
           <div>
             <h1>Admin resultados</h1>
-            <p>Actualiza inicio, resultados y recalcula puntos automáticamente.</p>
+            <p>
+              Actualiza inicio, resultados, clasificado real y recalcula puntos
+              V1.2 automáticamente.
+            </p>
           </div>
         </div>
 
         <div className="cards">
-          {partidos.map((partido) => (
-            <section key={partido.id} className="card">
-              <div className="matchInfo">
-                <p className="label">Partido</p>
-                <h2>
-                  {partido.local} vs {partido.visitante}
-                </h2>
-              </div>
+          {partidos.map((partido) => {
+            const eliminatoria = esEliminatoria(partido.fase);
+            const resultadoLocal = valores[partido.id]?.local ?? "";
+            const resultadoVisitante = valores[partido.id]?.visitante ?? "";
+            const hayEmpateEliminatoria =
+              eliminatoria &&
+              resultadoLocal !== "" &&
+              resultadoVisitante !== "" &&
+              Number(resultadoLocal) === Number(resultadoVisitante);
 
-              <div className="dateBlock">
-                <label>
-                  <CalendarDays size={16} />
-                  Inicio real
-                </label>
+            return (
+              <section key={partido.id} className="card">
+                <div className="matchInfo">
+                  <p className="label">{partido.fase || "Partido"}</p>
+                  <h2>
+                    {partido.local} vs {partido.visitante}
+                  </h2>
+                </div>
 
-                <input
-                  type="datetime-local"
-                  value={valores[partido.id]?.fechaInicio ?? ""}
-                  onChange={(e) =>
-                    setValores({
-                      ...valores,
-                      [partido.id]: {
-                        ...valores[partido.id],
-                        fechaInicio: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
+                <div className="dateBlock">
+                  <label>
+                    <CalendarDays size={16} />
+                    Inicio real
+                  </label>
 
-              <div className="scoreRow">
-                <input
-                  type="number"
-                  min="0"
-                  value={valores[partido.id]?.local ?? ""}
-                  onChange={(e) =>
-                    setValores({
-                      ...valores,
-                      [partido.id]: {
-                        ...valores[partido.id],
-                        local: e.target.value,
-                      },
-                    })
-                  }
-                />
+                  <input
+                    type="datetime-local"
+                    value={valores[partido.id]?.fechaInicio ?? ""}
+                    onChange={(e) =>
+                      setValores({
+                        ...valores,
+                        [partido.id]: {
+                          ...valores[partido.id],
+                          fechaInicio: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </div>
 
-                <span>-</span>
+                <div className="scoreRow">
+                  <input
+                    type="number"
+                    min="0"
+                    value={valores[partido.id]?.local ?? ""}
+                    onChange={(e) =>
+                      setValores({
+                        ...valores,
+                        [partido.id]: {
+                          ...valores[partido.id],
+                          local: e.target.value,
+                        },
+                      })
+                    }
+                  />
 
-                <input
-                  type="number"
-                  min="0"
-                  value={valores[partido.id]?.visitante ?? ""}
-                  onChange={(e) =>
-                    setValores({
-                      ...valores,
-                      [partido.id]: {
-                        ...valores[partido.id],
-                        visitante: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
+                  <span>-</span>
 
-              <button
-                disabled={guardandoId === partido.id}
-                onClick={() => guardarResultado(partido)}
-              >
-                <Save size={18} />
-                {guardandoId === partido.id
-                  ? "Guardando..."
-                  : "Guardar partido"}
-              </button>
-            </section>
-          ))}
+                  <input
+                    type="number"
+                    min="0"
+                    value={valores[partido.id]?.visitante ?? ""}
+                    onChange={(e) =>
+                      setValores({
+                        ...valores,
+                        [partido.id]: {
+                          ...valores[partido.id],
+                          visitante: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </div>
+
+                {eliminatoria && (
+                  <div className="qualifiedBlock">
+                    <label>
+                      <Award size={16} />
+                      Clasificado real
+                    </label>
+
+                    <select
+                      value={valores[partido.id]?.clasificadoReal ?? ""}
+                      onChange={(e) =>
+                        setValores({
+                          ...valores,
+                          [partido.id]: {
+                            ...valores[partido.id],
+                            clasificadoReal: e.target.value,
+                          },
+                        })
+                      }
+                      className={hayEmpateEliminatoria ? "requiredSelect" : ""}
+                    >
+                      <option value="">Sin definir</option>
+                      <option value={partido.local}>{partido.local}</option>
+                      <option value={partido.visitante}>{partido.visitante}</option>
+                    </select>
+
+                    {hayEmpateEliminatoria && (
+                      <p>Obligatorio si la eliminatoria termina empatada.</p>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  disabled={guardandoId === partido.id}
+                  onClick={() => guardarResultado(partido)}
+                >
+                  <Save size={18} />
+                  {guardandoId === partido.id
+                    ? "Guardando..."
+                    : "Guardar partido"}
+                </button>
+              </section>
+            );
+          })}
         </div>
 
         <div className="note">
           <Trophy size={20} />
-          La fecha de inicio bloqueará automáticamente los pronósticos cuando el
-          partido empiece.
+          Al guardar un partido se recalculan automáticamente partidos, grupos,
+          bonus y ranking V1.2.
         </div>
       </div>
 
@@ -364,7 +376,7 @@ function Styles() {
       }
 
       .container {
-        max-width: 980px;
+        max-width: 1180px;
         margin: 0 auto;
       }
 
@@ -471,7 +483,7 @@ function Styles() {
         border-radius: 28px;
         padding: 24px;
         display: grid;
-        grid-template-columns: 1fr 230px auto auto;
+        grid-template-columns: minmax(220px, 1fr) 230px auto 220px auto;
         gap: 20px;
         align-items: center;
       }
@@ -482,15 +494,17 @@ function Styles() {
         text-transform: uppercase;
         font-weight: 900;
         letter-spacing: 1px;
+        margin: 0;
       }
 
       .card h2 {
         font-size: 24px;
         font-weight: 900;
-        margin-top: 6px;
+        margin: 6px 0 0;
       }
 
-      .dateBlock label {
+      .dateBlock label,
+      .qualifiedBlock label {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -502,7 +516,8 @@ function Styles() {
         margin-bottom: 8px;
       }
 
-      .dateBlock input {
+      .dateBlock input,
+      .qualifiedBlock select {
         width: 100%;
         box-sizing: border-box;
         border-radius: 14px;
@@ -512,6 +527,17 @@ function Styles() {
         padding: 12px;
         font-weight: 800;
         outline: none;
+      }
+
+      .qualifiedBlock p {
+        margin: 8px 0 0;
+        color: #fde68a;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .requiredSelect {
+        border-color: #facc15 !important;
       }
 
       .scoreRow {
@@ -576,9 +602,23 @@ function Styles() {
         font-weight: 800;
       }
 
+      @media (max-width: 1180px) {
+        .card {
+          grid-template-columns: 1fr 230px auto;
+        }
+
+        .qualifiedBlock {
+          grid-column: 1 / 3;
+        }
+      }
+
       @media (max-width: 900px) {
         .card {
           grid-template-columns: 1fr;
+        }
+
+        .qualifiedBlock {
+          grid-column: auto;
         }
 
         .scoreRow input {
@@ -597,7 +637,7 @@ function Styles() {
         }
 
         .adminPage {
-          padding: 24px 12px 110px;
+          padding: 84px 12px 110px;
         }
       }
     `}</style>
