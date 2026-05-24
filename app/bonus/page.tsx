@@ -331,7 +331,7 @@ export default function BonusPage() {
 
   if (cargando) {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-6 text-white">
+      <main className="min-h-screen bg-slate-950 px-4 pb-32 pt-6 text-white">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/5 px-6 py-16 text-center shadow-2xl">
           <Loader2 className="mb-4 h-8 w-8 animate-spin text-emerald-300" />
           <h1 className="text-2xl font-black">Cargando bonus</h1>
@@ -344,7 +344,7 @@ export default function BonusPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-white">
+    <main className="min-h-screen bg-slate-950 px-4 pb-32 pt-6 text-white">
       <div className="mx-auto max-w-5xl space-y-6">
         <section className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-500/20 via-slate-900 to-slate-950 p-5 shadow-2xl sm:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
@@ -463,7 +463,7 @@ export default function BonusPage() {
             onChange={(valor) => actualizarSeleccion("seleccion_decepcion", valor)}
           />
 
-          <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl md:col-span-2">
+          <section className="mb-10 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl md:col-span-2">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex items-center gap-2 text-emerald-200">
