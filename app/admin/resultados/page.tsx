@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Shield, Trophy, Lock, CalendarDays, Award } from "lucide-react";
+import {
+  Award,
+  CalendarDays,
+  CheckCircle2,
+  Lock,
+  Save,
+  Shield,
+  Trophy,
+} from "lucide-react";
 
 import { obtenerParticipanteActual } from "@/lib/participante";
 import { recalcularPuntos } from "@/lib/recalcularPuntos";
@@ -42,11 +50,16 @@ function normalizarTexto(valor: string) {
   return limpio.length > 0 ? limpio : null;
 }
 
+function tieneResultadoGuardado(partido: Partido) {
+  return partido.resultado_local !== null && partido.resultado_visitante !== null;
+}
+
 export default function AdminResultadosPage() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [usuario, setUsuario] = useState<Participante | null>(null);
 
   const [valores, setValores] = useState<Record<number, ValoresPartido>>({});
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
@@ -57,6 +70,7 @@ export default function AdminResultadosPage() {
 
   async function cargarDatos() {
     setCargando(true);
+    setMensaje(null);
 
     const participante = await obtenerParticipanteActual();
     setUsuario(participante);
@@ -102,6 +116,7 @@ export default function AdminResultadosPage() {
 
   async function guardarResultado(partido: Partido) {
     setGuardandoId(partido.id);
+    setMensaje(null);
 
     try {
       const local = valores[partido.id]?.local ?? "";
@@ -174,7 +189,9 @@ export default function AdminResultadosPage() {
         )
       );
 
-      alert("Partido guardado y ranking V1.2 recalculado.");
+      setMensaje(
+        `${partido.local} vs ${partido.visitante}: partido guardado y ranking V1.2 recalculado.`
+      );
     } catch (error) {
       console.error("Error inesperado:", error);
       alert("Error inesperado guardando el partido.");
@@ -233,11 +250,19 @@ export default function AdminResultadosPage() {
           </div>
         </div>
 
+        {mensaje && (
+          <div className="successBox">
+            <CheckCircle2 size={20} />
+            <span>{mensaje}</span>
+          </div>
+        )}
+
         <div className="cards">
           {partidos.map((partido) => {
             const eliminatoria = esEliminatoria(partido.fase);
             const resultadoLocal = valores[partido.id]?.local ?? "";
             const resultadoVisitante = valores[partido.id]?.visitante ?? "";
+            const resultadoGuardado = tieneResultadoGuardado(partido);
             const hayEmpateEliminatoria =
               eliminatoria &&
               resultadoLocal !== "" &&
@@ -245,12 +270,35 @@ export default function AdminResultadosPage() {
               Number(resultadoLocal) === Number(resultadoVisitante);
 
             return (
-              <section key={partido.id} className="card">
+              <section
+                key={partido.id}
+                className={`card ${resultadoGuardado ? "cardSaved" : ""}`}
+              >
                 <div className="matchInfo">
-                  <p className="label">{partido.fase || "Partido"}</p>
+                  <div className="matchTop">
+                    <p className="label">{partido.fase || "Partido"}</p>
+
+                    {resultadoGuardado && (
+                      <span className="savedBadge">
+                        <CheckCircle2 size={15} />
+                        Resultado guardado
+                      </span>
+                    )}
+                  </div>
+
                   <h2>
                     {partido.local} vs {partido.visitante}
                   </h2>
+
+                  {resultadoGuardado && (
+                    <p className="savedResult">
+                      Marcador actual: {partido.resultado_local} -{" "}
+                      {partido.resultado_visitante}
+                      {partido.clasificado_real && (
+                        <span> · Clasifica: {partido.clasificado_real}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div className="dateBlock">
@@ -343,9 +391,15 @@ export default function AdminResultadosPage() {
                   disabled={guardandoId === partido.id}
                   onClick={() => guardarResultado(partido)}
                 >
-                  <Save size={18} />
+                  {resultadoGuardado ? (
+                    <CheckCircle2 size={18} />
+                  ) : (
+                    <Save size={18} />
+                  )}
                   {guardandoId === partido.id
                     ? "Guardando..."
+                    : resultadoGuardado
+                    ? "Actualizar partido"
                     : "Guardar partido"}
                 </button>
               </section>
@@ -468,6 +522,19 @@ function Styles() {
         margin-top: 4px;
       }
 
+      .successBox {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+        border-radius: 22px;
+        background: rgba(34,197,94,0.12);
+        border: 1px solid rgba(34,197,94,0.28);
+        color: #bbf7d0;
+        padding: 16px 18px;
+        font-weight: 900;
+      }
+
       .cards {
         display: grid;
         gap: 18px;
@@ -488,6 +555,18 @@ function Styles() {
         align-items: center;
       }
 
+      .cardSaved {
+        border-color: rgba(34,197,94,0.28);
+        box-shadow: 0 0 0 1px rgba(34,197,94,0.06);
+      }
+
+      .matchTop {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
       .label {
         color: #94a3b8;
         font-size: 12px;
@@ -497,10 +576,30 @@ function Styles() {
         margin: 0;
       }
 
+      .savedBadge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        background: rgba(34,197,94,0.12);
+        border: 1px solid rgba(34,197,94,0.25);
+        color: #bbf7d0;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
       .card h2 {
         font-size: 24px;
         font-weight: 900;
-        margin: 6px 0 0;
+        margin: 8px 0 0;
+      }
+
+      .savedResult {
+        margin: 8px 0 0;
+        color: #bbf7d0;
+        font-size: 13px;
+        font-weight: 850;
       }
 
       .dateBlock label,

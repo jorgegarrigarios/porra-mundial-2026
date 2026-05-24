@@ -163,7 +163,7 @@ export default function Navbar() {
 
             {isAdmin && (
               <Link
-                href="/admin/ligas"
+                href="/admin"
                 className={`adminButton ${
                   pathname.startsWith("/admin") ? "activeAdminButton" : ""
                 }`}
@@ -220,7 +220,7 @@ export default function Navbar() {
 
         {isAdmin && (
           <Link
-            href="/admin/ligas"
+            href="/admin"
             className={`mobileTopButton ${
               pathname.startsWith("/admin") ? "activeMobileTopButton" : ""
             }`}
