@@ -1,9 +1,57 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Shield, Trophy, Upload, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Shield, Trophy, Upload, ArrowRight, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function AdminHomePage() {
+  const router = useRouter();
+  const [cargando, setCargando] = useState(true);
+  const [autorizado, setAutorizado] = useState(false);
+
+  useEffect(() => {
+    let activo = true;
+
+    async function comprobarAdmin() {
+      setCargando(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: participante, error } = await supabase
+        .from("participantes")
+        .select("id, role")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+
+      if (!activo) return;
+
+      if (error || participante?.role !== "admin") {
+        setAutorizado(false);
+        setCargando(false);
+        router.replace("/");
+        return;
+      }
+
+      setAutorizado(true);
+      setCargando(false);
+    }
+
+    comprobarAdmin();
+
+    return () => {
+      activo = false;
+    };
+  }, [router]);
+
   const cards = [
     {
       title: "Moderación ligas",
@@ -24,6 +72,48 @@ export default function AdminHomePage() {
       icon: Upload,
     },
   ];
+
+  if (cargando) {
+    return (
+      <main className="page">
+        <div className="loadingBox">
+          <Loader2 className="spin" size={34} />
+          <p>Comprobando permisos de administrador...</p>
+        </div>
+
+        <style>{`
+          .page{
+            min-height:100vh;
+            background:linear-gradient(180deg,#020617 0%,#111827 100%);
+            color:white;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding:32px 16px;
+          }
+          .loadingBox{
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            gap:14px;
+            color:#cbd5e1;
+            font-weight:800;
+          }
+          .spin{
+            animation:spin 1s linear infinite;
+          }
+          @keyframes spin{
+            from{transform:rotate(0deg);}
+            to{transform:rotate(360deg);}
+          }
+        `}</style>
+      </main>
+    );
+  }
+
+  if (!autorizado) {
+    return null;
+  }
 
   return (
     <main className="page">

@@ -1,25 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   Shield,
   CheckCircle2,
   XCircle,
   Clock3,
-  Users,
+  Loader2,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
-import { obtenerParticipanteActual } from "@/lib/participante";
-
-type Participante = {
-  id: number;
-  nombre: string | null;
-  apellidos?: string | null;
-  nickname?: string | null;
-  role?: string | null;
-};
+import { comprobarAdminActual } from "@/lib/admin";
 
 type Liga = {
   id: number;
@@ -30,30 +23,44 @@ type Liga = {
 };
 
 export default function AdminLigasPage() {
-  const [usuario, setUsuario] =
-    useState<Participante | null>(null);
+  const router = useRouter();
 
+  const [autorizado, setAutorizado] = useState(false);
   const [ligas, setLigas] = useState<Liga[]>([]);
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let activo = true;
+
     async function cargar() {
-      const participante =
-        await obtenerParticipanteActual();
+      const admin = await comprobarAdminActual();
 
-      setUsuario(participante);
+      if (!activo) return;
 
-      if (!participante || participante.role !== "admin") {
-        setLoading(false);
+      if (!admin.isAdmin) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+
+        router.replace("/");
         return;
       }
 
-      cargarLigas();
+      setAutorizado(true);
+      await cargarLigas();
     }
 
     cargar();
-  }, []);
+
+    return () => {
+      activo = false;
+    };
+  }, [router]);
 
   async function cargarLigas() {
     const { data } = await supabase
@@ -62,7 +69,6 @@ export default function AdminLigasPage() {
       .order("created_at", { ascending: false });
 
     setLigas(data ?? []);
-
     setLoading(false);
   }
 
@@ -84,8 +90,9 @@ export default function AdminLigasPage() {
     return (
       <main className="page">
         <div className="container">
-          <div className="emptyBox">
-            Cargando panel admin...
+          <div className="loadingBox">
+            <Loader2 className="spin" size={30} />
+            Comprobando permisos de administrador...
           </div>
         </div>
 
@@ -94,24 +101,8 @@ export default function AdminLigasPage() {
     );
   }
 
-  if (!usuario || usuario.role !== "admin") {
-    return (
-      <main className="page">
-        <div className="container">
-          <div className="blockedCard">
-            <Shield size={40} />
-
-            <h1>Acceso restringido</h1>
-
-            <p>
-              Necesitas permisos de administrador.
-            </p>
-          </div>
-        </div>
-
-        <Styles />
-      </main>
-    );
+  if (!autorizado) {
+    return null;
   }
 
   return (
@@ -230,6 +221,29 @@ function Styles() {
       .container {
         max-width: 1100px;
         margin: 0 auto;
+      }
+
+      .loadingBox {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 28px;
+        padding: 28px;
+        text-align: center;
+        color: #94a3b8;
+        font-weight: 900;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:12px;
+      }
+
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
 
       .header {
@@ -398,8 +412,7 @@ function Styles() {
         color: white;
       }
 
-      .emptyBox,
-      .blockedCard {
+      .emptyBox {
         background: rgba(255,255,255,0.06);
 
         border: 1px solid rgba(255,255,255,0.10);
@@ -413,15 +426,6 @@ function Styles() {
         color: #94a3b8;
 
         font-weight: 900;
-      }
-
-      .blockedCard h1 {
-        color: white;
-        margin-top: 18px;
-      }
-
-      .blockedCard p {
-        margin-top: 8px;
       }
 
       @media (max-width: 760px) {

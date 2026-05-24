@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Award,
   CalendarDays,
   CheckCircle2,
-  Lock,
+  Loader2,
   Save,
   Shield,
   Trophy,
 } from "lucide-react";
 
-import { obtenerParticipanteActual } from "@/lib/participante";
+import { comprobarAdminActual } from "@/lib/admin";
 import { recalcularPuntos } from "@/lib/recalcularPuntos";
 import { supabase } from "@/lib/supabase";
 
@@ -24,14 +25,6 @@ type Partido = {
   resultado_visitante: number | null;
   fecha_inicio: string | null;
   clasificado_real: string | null;
-};
-
-type Participante = {
-  id: number;
-  nombre: string | null;
-  apellidos?: string | null;
-  nickname?: string | null;
-  role?: string | null;
 };
 
 type ValoresPartido = {
@@ -55,8 +48,10 @@ function tieneResultadoGuardado(partido: Partido) {
 }
 
 export default function AdminResultadosPage() {
+  const router = useRouter();
+
   const [partidos, setPartidos] = useState<Partido[]>([]);
-  const [usuario, setUsuario] = useState<Participante | null>(null);
+  const [autorizado, setAutorizado] = useState(false);
 
   const [valores, setValores] = useState<Record<number, ValoresPartido>>({});
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -65,54 +60,74 @@ export default function AdminResultadosPage() {
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
 
   useEffect(() => {
-    cargarDatos();
-  }, []);
+    let activo = true;
 
-  async function cargarDatos() {
-    setCargando(true);
-    setMensaje(null);
+    async function cargarDatos() {
+      setCargando(true);
+      setMensaje(null);
 
-    const participante = await obtenerParticipanteActual();
-    setUsuario(participante);
+      const admin = await comprobarAdminActual();
 
-    if (!participante || participante.role !== "admin") {
-      setCargando(false);
-      return;
-    }
+      if (!activo) return;
 
-    const { data, error } = await supabase
-      .from("partidos")
-      .select("*")
-      .order("fecha_inicio", { ascending: true, nullsFirst: false });
+      if (!admin.isAdmin) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-    if (error) {
-      console.error("Error cargando partidos:", error.message);
-      alert("Error cargando partidos: " + error.message);
-      setCargando(false);
-      return;
-    }
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
 
-    setPartidos((data ?? []) as Partido[]);
+        router.replace("/");
+        return;
+      }
 
-    const iniciales: Record<number, ValoresPartido> = {};
+      setAutorizado(true);
 
-    ((data ?? []) as Partido[]).forEach((p) => {
-      iniciales[p.id] = {
-        local: p.resultado_local !== null ? p.resultado_local.toString() : "",
-        visitante:
-          p.resultado_visitante !== null
-            ? p.resultado_visitante.toString()
+      const { data, error } = await supabase
+        .from("partidos")
+        .select("*")
+        .order("fecha_inicio", { ascending: true, nullsFirst: false });
+
+      if (!activo) return;
+
+      if (error) {
+        console.error("Error cargando partidos:", error.message);
+        alert("Error cargando partidos: " + error.message);
+        setCargando(false);
+        return;
+      }
+
+      setPartidos((data ?? []) as Partido[]);
+
+      const iniciales: Record<number, ValoresPartido> = {};
+
+      ((data ?? []) as Partido[]).forEach((p) => {
+        iniciales[p.id] = {
+          local: p.resultado_local !== null ? p.resultado_local.toString() : "",
+          visitante:
+            p.resultado_visitante !== null
+              ? p.resultado_visitante.toString()
+              : "",
+          fechaInicio: p.fecha_inicio
+            ? new Date(p.fecha_inicio).toISOString().slice(0, 16)
             : "",
-        fechaInicio: p.fecha_inicio
-          ? new Date(p.fecha_inicio).toISOString().slice(0, 16)
-          : "",
-        clasificadoReal: p.clasificado_real ?? "",
-      };
-    });
+          clasificadoReal: p.clasificado_real ?? "",
+        };
+      });
 
-    setValores(iniciales);
-    setCargando(false);
-  }
+      setValores(iniciales);
+      setCargando(false);
+    }
+
+    cargarDatos();
+
+    return () => {
+      activo = false;
+    };
+  }, [router]);
 
   async function guardarResultado(partido: Partido) {
     setGuardandoId(partido.id);
@@ -204,33 +219,18 @@ export default function AdminResultadosPage() {
     return (
       <main className="adminPage">
         <div className="container">
-          <div className="loadingBox">Cargando panel admin...</div>
+          <div className="loadingBox">
+            <Loader2 className="spin" size={28} />
+            <span>Comprobando permisos de administrador...</span>
+          </div>
         </div>
         <Styles />
       </main>
     );
   }
 
-  if (!usuario || usuario.role !== "admin") {
-    return (
-      <main className="adminPage">
-        <div className="container">
-          <section className="blockedCard">
-            <div className="blockedIcon">
-              <Lock size={36} />
-            </div>
-
-            <h1>Acceso restringido</h1>
-            <p>Necesitas permisos de administrador para acceder a esta zona.</p>
-
-            <a href="/" className="backButton">
-              Volver al inicio
-            </a>
-          </section>
-        </div>
-        <Styles />
-      </main>
-    );
+  if (!autorizado) {
+    return null;
   }
 
   return (
@@ -442,55 +442,19 @@ function Styles() {
         text-align: center;
         color: #94a3b8;
         font-weight: 800;
-      }
-
-      .blockedCard {
-        max-width: 520px;
-        margin: 80px auto 0;
-        text-align: center;
-        background: linear-gradient(
-          145deg,
-          rgba(15,23,42,0.98),
-          rgba(15,23,42,0.65)
-        );
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 32px;
-        padding: 34px;
-      }
-
-      .blockedIcon {
-        width: 74px;
-        height: 74px;
-        border-radius: 24px;
-        background: #dc2626;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 20px;
+        gap: 12px;
       }
 
-      .blockedCard h1 {
-        font-size: 32px;
-        font-weight: 900;
-        margin: 0;
+      .spin {
+        animation: spin 1s linear infinite;
       }
 
-      .blockedCard p {
-        color: #94a3b8;
-        line-height: 1.6;
-        margin-top: 12px;
-      }
-
-      .backButton {
-        margin-top: 24px;
-        display: inline-flex;
-        justify-content: center;
-        background: #2563eb;
-        color: white;
-        text-decoration: none;
-        padding: 15px 22px;
-        border-radius: 16px;
-        font-weight: 900;
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
 
       .header {

@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Upload,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { comprobarAdminActual } from "@/lib/admin";
 
 type PartidoImportado = {
   local: string;
@@ -18,9 +25,46 @@ type PartidoImportado = {
 };
 
 export default function ImportarPartidosPage() {
+  const router = useRouter();
+
+  const [cargandoPermisos, setCargandoPermisos] = useState(true);
+  const [autorizado, setAutorizado] = useState(false);
   const [texto, setTexto] = useState("");
   const [resultado, setResultado] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let activo = true;
+
+    async function validarAdmin() {
+      const admin = await comprobarAdminActual();
+
+      if (!activo) return;
+
+      if (!admin.isAdmin) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+
+        router.replace("/");
+        return;
+      }
+
+      setAutorizado(true);
+      setCargandoPermisos(false);
+    }
+
+    validarAdmin();
+
+    return () => {
+      activo = false;
+    };
+  }, [router]);
 
   async function importarPartidos() {
     setResultado("");
@@ -66,6 +110,48 @@ export default function ImportarPartidosPage() {
     } catch {
       setError("JSON inválido. Revisa comas, comillas y corchetes.");
     }
+  }
+
+  if (cargandoPermisos) {
+    return (
+      <main className="page">
+        <div className="loadingBox">
+          <Loader2 className="spin" size={34} />
+          <p>Comprobando permisos de administrador...</p>
+        </div>
+
+        <style>{`
+          .page{
+            min-height:100vh;
+            background:linear-gradient(180deg,#020617 0%,#111827 100%);
+            color:white;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding:32px 16px;
+          }
+          .loadingBox{
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            gap:14px;
+            color:#cbd5e1;
+            font-weight:800;
+          }
+          .spin{
+            animation:spin 1s linear infinite;
+          }
+          @keyframes spin{
+            from{transform:rotate(0deg);}
+            to{transform:rotate(360deg);}
+          }
+        `}</style>
+      </main>
+    );
+  }
+
+  if (!autorizado) {
+    return null;
   }
 
   return (
