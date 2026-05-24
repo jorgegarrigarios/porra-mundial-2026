@@ -22,8 +22,8 @@ import {
   Zap,
 } from "lucide-react";
 
-import { supabase } from "@/lib/supabase";
 import { obtenerParticipanteActual } from "@/lib/participante";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -45,6 +45,9 @@ type MiembroRanking = {
   id: number;
   nombre: string;
   puntos: number;
+  puntosPartidos: number;
+  puntosGrupos: number;
+  puntosBonus: number;
   aciertos: number;
 };
 
@@ -67,6 +70,16 @@ type LigaParticipanteRow = {
 type PronosticoRow = {
   participante_id: number;
   puntos: number | null;
+};
+
+type PronosticoGrupoRow = {
+  participante_id: number;
+  puntos_total: number | null;
+};
+
+type PronosticoBonusRow = {
+  participante_id: number;
+  puntos_total: number | null;
 };
 
 async function conTimeout<T>(
@@ -95,6 +108,16 @@ function normalizarParticipante(
   if (!participante) return null;
   if (Array.isArray(participante)) return participante[0] ?? null;
   return participante;
+}
+
+function sumarPuntosPorParticipante<T extends { participante_id: number }>(
+  filas: T[],
+  participanteId: number,
+  obtenerPuntos: (fila: T) => number | null
+) {
+  return filas
+    .filter((fila) => fila.participante_id === participanteId)
+    .reduce((total, fila) => total + (obtenerPuntos(fila) ?? 0), 0);
 }
 
 export default function LigaDetallePage({ params }: Props) {
@@ -133,6 +156,24 @@ export default function LigaDetallePage({ params }: Props) {
           event: "*",
           schema: "public",
           table: "pronosticos",
+        },
+        () => cargarLiga(ligaId, true)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pronosticos_grupos",
+        },
+        () => cargarLiga(ligaId, true)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pronosticos_bonus",
         },
         () => cargarLiga(ligaId, true)
       )
@@ -246,8 +287,12 @@ export default function LigaDetallePage({ params }: Props) {
 
       const idsMiembros = miembros.map((miembro) => miembro.id);
 
-      const { data: pronosticosData, error: pronosticosError } =
-        await conTimeout(
+      const [
+        { data: pronosticosData, error: pronosticosError },
+        { data: gruposData, error: gruposError },
+        { data: bonusData, error: bonusError },
+      ] = await Promise.all([
+        conTimeout(
           idsMiembros.length > 0
             ? supabase
                 .from("pronosticos")
@@ -258,36 +303,89 @@ export default function LigaDetallePage({ params }: Props) {
                 .select("participante_id, puntos")
                 .eq("participante_id", -1),
           10000,
-          "No se ha podido cargar el ranking."
-        );
+          "No se ha podido cargar el ranking de partidos."
+        ),
+        conTimeout(
+          idsMiembros.length > 0
+            ? supabase
+                .from("pronosticos_grupos")
+                .select("participante_id, puntos_total")
+                .in("participante_id", idsMiembros)
+            : supabase
+                .from("pronosticos_grupos")
+                .select("participante_id, puntos_total")
+                .eq("participante_id", -1),
+          10000,
+          "No se ha podido cargar el ranking de grupos."
+        ),
+        conTimeout(
+          idsMiembros.length > 0
+            ? supabase
+                .from("pronosticos_bonus")
+                .select("participante_id, puntos_total")
+                .in("participante_id", idsMiembros)
+            : supabase
+                .from("pronosticos_bonus")
+                .select("participante_id, puntos_total")
+                .eq("participante_id", -1),
+          10000,
+          "No se ha podido cargar el ranking de bonus."
+        ),
+      ]);
 
-      if (pronosticosError) {
+      if (pronosticosError || gruposError || bonusError) {
         setError("No se ha podido cargar el ranking.");
         return;
       }
 
       const pronosticos = (pronosticosData ?? []) as PronosticoRow[];
+      const pronosticosGrupos = (gruposData ?? []) as PronosticoGrupoRow[];
+      const pronosticosBonus = (bonusData ?? []) as PronosticoBonusRow[];
 
       const rankingCalculado: MiembroRanking[] = miembros.map((miembro) => {
         const nombreVisible = miembro.nickname || miembro.nombre || "Usuario";
 
-        const pronosticosMiembro = pronosticos.filter(
-          (p) => p.participante_id === miembro.id
+        const puntosPartidos = sumarPuntosPorParticipante(
+          pronosticos,
+          miembro.id,
+          (p) => p.puntos
         );
 
-        const puntos = pronosticosMiembro.reduce(
-          (total, p) => total + (p.puntos ?? 0),
-          0
+        const puntosGrupos = sumarPuntosPorParticipante(
+          pronosticosGrupos,
+          miembro.id,
+          (p) => p.puntos_total
         );
 
-        const aciertos = pronosticosMiembro.filter(
-          (p) => (p.puntos ?? 0) > 0
+        const puntosBonus = sumarPuntosPorParticipante(
+          pronosticosBonus,
+          miembro.id,
+          (p) => p.puntos_total
+        );
+
+        const puntos = puntosPartidos + puntosGrupos + puntosBonus;
+
+        const aciertosPartidos = pronosticos.filter(
+          (p) => p.participante_id === miembro.id && (p.puntos ?? 0) > 0
         ).length;
+
+        const aciertosGrupos = pronosticosGrupos.filter(
+          (p) => p.participante_id === miembro.id && (p.puntos_total ?? 0) > 0
+        ).length;
+
+        const aciertosBonus = pronosticosBonus.filter(
+          (p) => p.participante_id === miembro.id && (p.puntos_total ?? 0) > 0
+        ).length;
+
+        const aciertos = aciertosPartidos + aciertosGrupos + aciertosBonus;
 
         return {
           id: miembro.id,
           nombre: nombreVisible,
           puntos,
+          puntosPartidos,
+          puntosGrupos,
+          puntosBonus,
           aciertos,
         };
       });
@@ -518,6 +616,25 @@ export default function LigaDetallePage({ params }: Props) {
           </div>
         </section>
 
+        {usuarioEnRanking && (
+          <section className="pointsBreakdown">
+            <div>
+              <p>Partidos</p>
+              <strong>{usuarioEnRanking.puntosPartidos}</strong>
+            </div>
+
+            <div>
+              <p>Grupos</p>
+              <strong>{usuarioEnRanking.puntosGrupos}</strong>
+            </div>
+
+            <div>
+              <p>Bonus</p>
+              <strong>{usuarioEnRanking.puntosBonus}</strong>
+            </div>
+          </section>
+        )}
+
         <section className="contextActions">
           <Link href="/mis-pronosticos" className="contextAction primary">
             <Target size={23} />
@@ -623,6 +740,12 @@ export default function LigaDetallePage({ params }: Props) {
                         ? "Líder actual"
                         : `${ranking[0]?.puntos - miembro.puntos} puntos del líder`}
                     </p>
+
+                    <div className="miniBreakdown">
+                      <span>Partidos {miembro.puntosPartidos}</span>
+                      <span>Grupos {miembro.puntosGrupos}</span>
+                      <span>Bonus {miembro.puntosBonus}</span>
+                    </div>
                   </div>
 
                   <div className="memberStats">
@@ -695,7 +818,10 @@ function PodiumCard({
 
       <strong>{miembro.puntos}</strong>
 
-      <small>{miembro.aciertos} aciertos</small>
+      <small>
+        {miembro.aciertos} aciertos · {miembro.puntosPartidos} partidos ·{" "}
+        {miembro.puntosGrupos} grupos · {miembro.puntosBonus} bonus
+      </small>
     </article>
   );
 }
@@ -899,6 +1025,34 @@ function Styles() {
         font-size: 16px;
       }
 
+      .pointsBreakdown {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .pointsBreakdown div {
+        border-radius: 22px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.10);
+        padding: 16px;
+      }
+
+      .pointsBreakdown p {
+        margin: 0 0 6px;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 950;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .pointsBreakdown strong {
+        font-size: 26px;
+        font-weight: 950;
+      }
+
       .contextActions {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1070,8 +1224,11 @@ function Styles() {
       }
 
       .podiumCard small {
+        display: block;
+        margin-top: 8px;
         color: #94a3b8;
         font-weight: 850;
+        line-height: 1.45;
       }
 
       .rankingList {
@@ -1134,6 +1291,23 @@ function Styles() {
         color: #94a3b8;
         font-size: 13px;
         font-weight: 750;
+      }
+
+      .miniBreakdown {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .miniBreakdown span {
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.10);
+        color: #cbd5e1;
+        padding: 5px 8px;
+        font-size: 11px;
+        font-weight: 900;
       }
 
       .memberStats {
@@ -1287,16 +1461,9 @@ function Styles() {
         }
 
         .personalPanel,
-        .contextActions {
+        .contextActions,
+        .pointsBreakdown {
           grid-template-columns: 1fr;
-        }
-
-        .personalCard {
-          padding: 18px;
-        }
-
-        .contextAction {
-          padding: 17px;
         }
 
         .sectionHeader {
@@ -1305,27 +1472,23 @@ function Styles() {
         }
 
         .rankingRow {
-          grid-template-columns: auto 1fr auto;
-          gap: 12px;
-          padding: 15px;
+          grid-template-columns: auto 1fr;
+          align-items: flex-start;
         }
 
         .memberStats {
-          text-align: right;
+          text-align: left;
+          grid-column: 2;
         }
 
         .aciertosBadge {
-          grid-column: 2 / 4;
-          justify-self: start;
+          grid-column: 2;
+          width: fit-content;
         }
 
         .errorBox {
           flex-direction: column;
           align-items: stretch;
-        }
-
-        .retryButton {
-          width: 100%;
         }
       }
     `}</style>
