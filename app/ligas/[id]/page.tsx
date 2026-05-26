@@ -574,9 +574,9 @@ export default function LigaDetallePage({ params }: Props) {
     return (
       <main className="page">
         <div className="container">
-          <Link href="/ligas" className="backLink">
+          <Link href="/ligas/gestionar" className="backLink">
             <ArrowLeft size={18} />
-            Volver a ligas
+            Volver a gestionar ligas
           </Link>
 
           <section className="emptyBox">
@@ -584,7 +584,7 @@ export default function LigaDetallePage({ params }: Props) {
             <h1>No tienes acceso a esta liga</h1>
             <p>Entra en una liga a la que pertenezcas o únete con un código.</p>
 
-            <Link href="/ligas" className="primaryButton">
+            <Link href="/ligas/gestionar" className="primaryButton">
               Ir a mis ligas
             </Link>
           </section>
@@ -599,9 +599,9 @@ export default function LigaDetallePage({ params }: Props) {
     return (
       <main className="page">
         <div className="container">
-          <Link href="/ligas" className="backLink">
+          <Link href="/ligas/gestionar" className="backLink">
             <ArrowLeft size={18} />
-            Volver a ligas
+            Volver a gestionar ligas
           </Link>
 
           <section className="emptyBox">
@@ -627,9 +627,9 @@ export default function LigaDetallePage({ params }: Props) {
   return (
     <main className="page">
       <div className="container">
-        <Link href="/ligas" className="backLink">
+        <Link href="/ligas/gestionar" className="backLink">
           <ArrowLeft size={18} />
-          Cambiar de liga
+          Gestionar ligas
         </Link>
 
         {error && (
