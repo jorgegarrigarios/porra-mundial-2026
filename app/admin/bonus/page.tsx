@@ -22,6 +22,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { comprobarAdminActual } from "@/lib/admin";
 import { crearSlug } from "@/lib/normalizarTexto";
+import { calcularPuntosBonus } from "@/lib/puntos";
 
 type SeleccionImportable = {
   nombre: string;
@@ -67,6 +68,11 @@ type PartidoRow = {
 
 type ResultadosOficialesBonus = {
   campeon: string;
+  subcampeon: string;
+  semifinalista_1: string;
+  semifinalista_2: string;
+  semifinalista_3: string;
+  semifinalista_4: string;
   finalista_1: string;
   finalista_2: string;
   bota_oro: string;
@@ -76,6 +82,7 @@ type ResultadosOficialesBonus = {
   mejor_jugador: string;
   mejor_portero: string;
   seleccion_revelacion: string;
+  revelacion_llega_cuartos: string;
   seleccion_decepcion: string;
 };
 
@@ -91,6 +98,11 @@ const SELECCIONES_IMPORTABLES: SeleccionImportable[] = [
 
 const RESULTADOS_INICIALES: ResultadosOficialesBonus = {
   campeon: "",
+  subcampeon: "",
+  semifinalista_1: "",
+  semifinalista_2: "",
+  semifinalista_3: "",
+  semifinalista_4: "",
   finalista_1: "",
   finalista_2: "",
   bota_oro: "",
@@ -100,6 +112,7 @@ const RESULTADOS_INICIALES: ResultadosOficialesBonus = {
   mejor_jugador: "",
   mejor_portero: "",
   seleccion_revelacion: "",
+  revelacion_llega_cuartos: "",
   seleccion_decepcion: "",
 };
 
@@ -288,6 +301,11 @@ export default function AdminBonusPage() {
 
     setResultadosOficiales({
       campeon: mapa.get("campeon") ?? "",
+      subcampeon: mapa.get("subcampeon") ?? "",
+      semifinalista_1: mapa.get("semifinalista_1") ?? "",
+      semifinalista_2: mapa.get("semifinalista_2") ?? "",
+      semifinalista_3: mapa.get("semifinalista_3") ?? "",
+      semifinalista_4: mapa.get("semifinalista_4") ?? "",
       finalista_1: mapa.get("finalista_1") ?? "",
       finalista_2: mapa.get("finalista_2") ?? "",
       bota_oro: mapa.get("bota_oro") ?? "",
@@ -297,6 +315,7 @@ export default function AdminBonusPage() {
       mejor_jugador: mapa.get("mejor_jugador") ?? "",
       mejor_portero: mapa.get("mejor_portero") ?? "",
       seleccion_revelacion: mapa.get("seleccion_revelacion") ?? "",
+      revelacion_llega_cuartos: mapa.get("revelacion_llega_cuartos") ?? "",
       seleccion_decepcion: mapa.get("seleccion_decepcion") ?? "",
     });
   }
@@ -521,7 +540,20 @@ export default function AdminBonusPage() {
         throw new Error(guardarError.message);
       }
 
-      setResultado("Resultados oficiales de bonus guardados correctamente.");
+      const resultadoRecalculo = await calcularPuntosBonus();
+
+      if (!resultadoRecalculo.ok) {
+        throw new Error(
+          resultadoRecalculo.error ??
+            "Resultados guardados, pero no se pudieron recalcular los puntos bonus."
+        );
+      }
+
+      setResultado(
+        `Resultados oficiales de bonus guardados correctamente. Pronósticos recalculados: ${
+          resultadoRecalculo.actualizados ?? 0
+        }.`
+      );
       await cargarDatosResultados();
     } catch (err) {
       const message =
@@ -643,6 +675,46 @@ export default function AdminBonusPage() {
 
             <BonusSelectAdmin
               icono={<Medal size={18} />}
+              label="Subcampeón"
+              value={resultadosOficiales.subcampeon}
+              opciones={selecciones}
+              onChange={(valor) => actualizarResultado("subcampeon", valor)}
+            />
+
+            <BonusSelectAdmin
+              icono={<Trophy size={18} />}
+              label="Semifinalista 1"
+              value={resultadosOficiales.semifinalista_1}
+              opciones={selecciones}
+              onChange={(valor) => actualizarResultado("semifinalista_1", valor)}
+            />
+
+            <BonusSelectAdmin
+              icono={<Trophy size={18} />}
+              label="Semifinalista 2"
+              value={resultadosOficiales.semifinalista_2}
+              opciones={selecciones}
+              onChange={(valor) => actualizarResultado("semifinalista_2", valor)}
+            />
+
+            <BonusSelectAdmin
+              icono={<Trophy size={18} />}
+              label="Semifinalista 3"
+              value={resultadosOficiales.semifinalista_3}
+              opciones={selecciones}
+              onChange={(valor) => actualizarResultado("semifinalista_3", valor)}
+            />
+
+            <BonusSelectAdmin
+              icono={<Trophy size={18} />}
+              label="Semifinalista 4"
+              value={resultadosOficiales.semifinalista_4}
+              opciones={selecciones}
+              onChange={(valor) => actualizarResultado("semifinalista_4", valor)}
+            />
+
+            <BonusSelectAdmin
+              icono={<Medal size={18} />}
               label="Finalista 1"
               value={resultadosOficiales.finalista_1}
               opciones={selecciones}
@@ -712,6 +784,16 @@ export default function AdminBonusPage() {
               opciones={selecciones}
               onChange={(valor) =>
                 actualizarResultado("seleccion_revelacion", valor)
+              }
+            />
+
+            <BonusSelectAdmin
+              icono={<Trophy size={18} />}
+              label="Revelación llega a cuartos"
+              value={resultadosOficiales.revelacion_llega_cuartos}
+              opciones={selecciones}
+              onChange={(valor) =>
+                actualizarResultado("revelacion_llega_cuartos", valor)
               }
             />
 

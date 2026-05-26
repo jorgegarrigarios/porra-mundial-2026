@@ -1,4 +1,37 @@
+import { supabase } from "@/lib/supabase";
+
 export type TipoPronostico = "1X2" | "MARCADOR" | "EXACTO" | null;
+
+type ResultadoPuntosBonus = {
+  puntosCampeon: number;
+  puntosFinalistas: number;
+  puntosBotaOro: number;
+  puntosMejorJugador: number;
+  puntosMejorPortero: number;
+  puntosRevelacion: number;
+  puntosDecepcion: number;
+  puntosTotal: number;
+};
+
+type CalcularPuntosBonusParams = {
+  campeonPronosticado: string | null;
+  finalista1Pronosticado: string | null;
+  finalista2Pronosticado: string | null;
+  botaOroPronosticada: string | null;
+  mejorJugadorPronosticado: string | null;
+  mejorPorteroPronosticado: string | null;
+  revelacionPronosticada: string | null;
+  decepcionPronosticada: string | null;
+  resultados: Record<string, string | null>;
+};
+
+type ResultadoRecalculoBonus = {
+  ok: boolean;
+  actualizados?: number;
+  error?: string;
+};
+
+type FilaGenerica = Record<string, unknown>;
 
 export function obtenerSignoPartido(
   golesLocal: number,
@@ -11,6 +44,30 @@ export function obtenerSignoPartido(
 
 export function normalizarTexto(valor: string | null | undefined) {
   return valor?.trim().toLowerCase() || "";
+}
+
+function obtenerTexto(
+  fila: FilaGenerica,
+  claves: string[]
+): string | null {
+  for (const clave of claves) {
+    const valor = fila[clave];
+
+    if (typeof valor === "string" && valor.trim()) {
+      return valor;
+    }
+  }
+
+  return null;
+}
+
+function crearMapaResultados(
+  filas: Array<{ clave: string; valor: string | null }>
+) {
+  return filas.reduce<Record<string, string | null>>((acc, fila) => {
+    acc[fila.clave] = fila.valor;
+    return acc;
+  }, {});
 }
 
 export function calcularPuntosGrupo1X2(
@@ -161,17 +218,9 @@ export function calcularPuntosClasificadosGrupo(params: {
   };
 }
 
-export function calcularPuntosBonus(params: {
-  campeonPronosticado: string | null;
-  finalista1Pronosticado: string | null;
-  finalista2Pronosticado: string | null;
-  botaOroPronosticada: string | null;
-  mejorJugadorPronosticado: string | null;
-  mejorPorteroPronosticado: string | null;
-  revelacionPronosticada: string | null;
-  decepcionPronosticada: string | null;
-  resultados: Record<string, string | null>;
-}) {
+function calcularPuntosBonusInterno(
+  params: CalcularPuntosBonusParams
+): ResultadoPuntosBonus {
   const {
     campeonPronosticado,
     finalista1Pronosticado,
@@ -192,18 +241,22 @@ export function calcularPuntosBonus(params: {
     resultados.semifinalista_2,
     resultados.semifinalista_3,
     resultados.semifinalista_4,
-  ].map(normalizarTexto);
+  ]
+    .map(normalizarTexto)
+    .filter(Boolean);
 
   const finalistas = [
     resultados.finalista_1,
     resultados.finalista_2,
-  ].map(normalizarTexto);
+  ]
+    .map(normalizarTexto)
+    .filter(Boolean);
 
   const top3Goleadores = [
     resultados.bota_oro,
-    resultados.goleador_top3_1,
-    resultados.goleador_top3_2,
-    resultados.goleador_top3_3,
+    resultados.top_goleador_1,
+    resultados.top_goleador_2,
+    resultados.top_goleador_3,
   ]
     .map(normalizarTexto)
     .filter(Boolean);
@@ -265,18 +318,20 @@ export function calcularPuntosBonus(params: {
 
   if (
     revelacionPron &&
-    revelacionPron === normalizarTexto(resultados.revelacion_resultado)
+    revelacionPron === normalizarTexto(resultados.seleccion_revelacion)
   ) {
     puntosRevelacion += 14;
 
-    if (normalizarTexto(resultados.revelacion_llega_cuartos) === "si") {
+    if (
+      revelacionPron === normalizarTexto(resultados.revelacion_llega_cuartos)
+    ) {
       puntosRevelacion += 5;
     }
   }
 
   const puntosDecepcion =
     decepcionPron &&
-    decepcionPron === normalizarTexto(resultados.decepcion_resultado)
+    decepcionPron === normalizarTexto(resultados.seleccion_decepcion)
       ? 14
       : 0;
 
@@ -298,6 +353,150 @@ export function calcularPuntosBonus(params: {
     puntosRevelacion,
     puntosDecepcion,
     puntosTotal,
+  };
+}
+
+export function calcularPuntosBonus(
+  params: CalcularPuntosBonusParams
+): ResultadoPuntosBonus;
+export function calcularPuntosBonus(): Promise<ResultadoRecalculoBonus>;
+export function calcularPuntosBonus(
+  params?: CalcularPuntosBonusParams
+): ResultadoPuntosBonus | Promise<ResultadoRecalculoBonus> {
+  if (!params) {
+    return recalcularPuntosBonus();
+  }
+
+  return calcularPuntosBonusInterno(params);
+}
+
+export async function recalcularPuntosBonus(): Promise<ResultadoRecalculoBonus> {
+  const { data: resultadosData, error: resultadosError } = await supabase
+    .from("resultados_bonus")
+    .select("clave, valor");
+
+  if (resultadosError) {
+    return {
+      ok: false,
+      error: `Error cargando resultados_bonus: ${resultadosError.message}`,
+    };
+  }
+
+  const resultados = crearMapaResultados(resultadosData ?? []);
+
+  const { data: pronosticos, error: pronosticosError } = await supabase
+    .from("pronosticos_bonus")
+    .select("*");
+
+  if (pronosticosError) {
+    return {
+      ok: false,
+      error: `Error cargando pronosticos_bonus: ${pronosticosError.message}`,
+    };
+  }
+
+  let actualizados = 0;
+
+  for (const pronostico of pronosticos ?? []) {
+    const fila = pronostico as FilaGenerica;
+
+    const puntos = calcularPuntosBonusInterno({
+      campeonPronosticado: obtenerTexto(fila, [
+        "campeon",
+        "campeon_pronosticado",
+        "pronostico_campeon",
+      ]),
+      finalista1Pronosticado: obtenerTexto(fila, [
+        "finalista_1",
+        "finalista1",
+        "finalista_1_pronosticado",
+        "pronostico_finalista_1",
+      ]),
+      finalista2Pronosticado: obtenerTexto(fila, [
+        "finalista_2",
+        "finalista2",
+        "finalista_2_pronosticado",
+        "pronostico_finalista_2",
+      ]),
+      botaOroPronosticada: obtenerTexto(fila, [
+        "bota_oro",
+        "bota_oro_pronosticada",
+        "pronostico_bota_oro",
+      ]),
+      mejorJugadorPronosticado: obtenerTexto(fila, [
+        "mejor_jugador",
+        "mejor_jugador_pronosticado",
+        "pronostico_mejor_jugador",
+      ]),
+      mejorPorteroPronosticado: obtenerTexto(fila, [
+        "mejor_portero",
+        "mejor_portero_pronosticado",
+        "pronostico_mejor_portero",
+      ]),
+      revelacionPronosticada: obtenerTexto(fila, [
+        "seleccion_revelacion",
+        "revelacion",
+        "revelacion_pronosticada",
+        "pronostico_revelacion",
+      ]),
+      decepcionPronosticada: obtenerTexto(fila, [
+        "seleccion_decepcion",
+        "decepcion",
+        "decepcion_pronosticada",
+        "pronostico_decepcion",
+      ]),
+      resultados,
+    });
+
+    const actualizacion: Record<string, number> = {};
+
+    const columnasPosibles: Record<string, number> = {
+      puntos_campeon: puntos.puntosCampeon,
+      puntos_finalistas: puntos.puntosFinalistas,
+      puntos_bota_oro: puntos.puntosBotaOro,
+      puntos_mejor_jugador: puntos.puntosMejorJugador,
+      puntos_mejor_portero: puntos.puntosMejorPortero,
+      puntos_revelacion: puntos.puntosRevelacion,
+      puntos_decepcion: puntos.puntosDecepcion,
+      puntos_total: puntos.puntosTotal,
+      puntos_total_bonus: puntos.puntosTotal,
+      puntos_bonus: puntos.puntosTotal,
+    };
+
+    for (const [columna, valor] of Object.entries(columnasPosibles)) {
+      if (columna in fila) {
+        actualizacion[columna] = valor;
+      }
+    }
+
+    if (Object.keys(actualizacion).length === 0) {
+      continue;
+    }
+
+    const id = fila.id;
+
+    if (typeof id !== "number" && typeof id !== "string") {
+      continue;
+    }
+
+    const { error: updateError } = await supabase
+      .from("pronosticos_bonus")
+      .update(actualizacion)
+      .eq("id", id);
+
+    if (updateError) {
+      return {
+        ok: false,
+        error: `Error actualizando pronostico_bonus ${id}: ${updateError.message}`,
+      };
+    }
+
+    actualizados += 1;
+  }
+
+  return {
+    ok: true,
+    actualizados,
   };
 }
 
