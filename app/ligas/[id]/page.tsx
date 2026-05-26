@@ -13,6 +13,7 @@ import {
   Medal,
   RefreshCw,
   ScrollText,
+  Share2,
   Shield,
   Sparkles,
   Table2,
@@ -152,6 +153,7 @@ export default function LigaDetallePage({ params }: Props) {
   const [sinAcceso, setSinAcceso] = useState(false);
   const [error, setError] = useState("");
   const [codigoCopiado, setCodigoCopiado] = useState(false);
+  const [enlaceCopiado, setEnlaceCopiado] = useState(false);
   const [inscripcionInput, setInscripcionInput] = useState("0");
   const [guardandoInscripcion, setGuardandoInscripcion] = useState(false);
   const [mensajeInscripcion, setMensajeInscripcion] = useState("");
@@ -464,6 +466,24 @@ export default function LigaDetallePage({ params }: Props) {
     }
   }
 
+  async function copiarEnlaceInvitacion() {
+    if (!liga) return;
+
+    try {
+      const origen = window.location.origin;
+      const enlace = `${origen}/invitar/${encodeURIComponent(liga.codigo)}`;
+
+      await navigator.clipboard.writeText(enlace);
+      setEnlaceCopiado(true);
+
+      setTimeout(() => {
+        setEnlaceCopiado(false);
+      }, 1800);
+    } catch {
+      setError("No se ha podido copiar el enlace de invitación.");
+    }
+  }
+
   async function guardarInscripcion() {
     if (!liga || !usuarioActual || liga.creador_id !== usuarioActual.id) return;
 
@@ -662,6 +682,15 @@ export default function LigaDetallePage({ params }: Props) {
             <button type="button" onClick={copiarCodigo} className="codeButton">
               {codigoCopiado ? <CheckCircle2 size={18} /> : <Copy size={18} />}
               {codigoCopiado ? "Copiado" : liga.codigo}
+            </button>
+
+            <button
+              type="button"
+              onClick={copiarEnlaceInvitacion}
+              className="codeButton"
+            >
+              {enlaceCopiado ? <CheckCircle2 size={18} /> : <Share2 size={18} />}
+              {enlaceCopiado ? "Enlace copiado" : "Copiar enlace"}
             </button>
           </div>
         </section>
