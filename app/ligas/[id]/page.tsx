@@ -3,11 +3,13 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   Copy,
+  CreditCard,
   Crown,
   Flame,
   Medal,
@@ -85,6 +87,13 @@ type PronosticoBonusRow = {
   puntos_total: number | null;
 };
 
+type PagoUsuario = {
+  pagado: boolean;
+  importe: number | null;
+  fecha_pago: string | null;
+  nota: string | null;
+};
+
 async function conTimeout<T>(
   operacion: PromiseLike<T>,
   ms: number,
@@ -157,6 +166,7 @@ export default function LigaDetallePage({ params }: Props) {
   const [inscripcionInput, setInscripcionInput] = useState("0");
   const [guardandoInscripcion, setGuardandoInscripcion] = useState(false);
   const [mensajeInscripcion, setMensajeInscripcion] = useState("");
+  const [pagoUsuario, setPagoUsuario] = useState<PagoUsuario | null>(null);
 
   useEffect(() => {
     const id = Number(resolvedParams.id);
@@ -219,6 +229,16 @@ export default function LigaDetallePage({ params }: Props) {
           schema: "public",
           table: "ligas",
           filter: `id=eq.${ligaId}`,
+        },
+        () => cargarLiga(ligaId, true)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "liga_pagos",
+          filter: `liga_id=eq.${ligaId}`,
         },
         () => cargarLiga(ligaId, true)
       )
@@ -290,6 +310,23 @@ export default function LigaDetallePage({ params }: Props) {
       const ligaNormalizada = ligaData as Liga;
       setLiga(ligaNormalizada);
       setInscripcionInput(String(ligaNormalizada.inscripcion_eur ?? 0));
+
+      const { data: pagoData, error: pagoError } = await conTimeout(
+        supabase
+          .from("liga_pagos")
+          .select("pagado, importe, fecha_pago, nota")
+          .eq("liga_id", id)
+          .eq("participante_id", usuario.id)
+          .maybeSingle(),
+        10000,
+        "No se ha podido cargar tu estado de pago."
+      );
+
+      if (pagoError) {
+        setPagoUsuario(null);
+      } else {
+        setPagoUsuario((pagoData as PagoUsuario | null) ?? null);
+      }
 
       const { data: miembrosData, error: miembrosError } = await conTimeout(
         supabase
@@ -553,6 +590,9 @@ export default function LigaDetallePage({ params }: Props) {
     botePremios - premioSegundo - premioTercero,
     0
   );
+  const hayInscripcionConfigurada = inscripcionLiga > 0;
+  const pagoConfirmado = Boolean(pagoUsuario?.pagado);
+  const importePagoUsuario = Number(pagoUsuario?.importe ?? inscripcionLiga);
 
   if (cargando) {
     return (
@@ -869,6 +909,28 @@ export default function LigaDetallePage({ params }: Props) {
             </div>
           )}
         </section>
+
+        {hayInscripcionConfigurada && (
+          <section className={`paymentNotice ${pagoConfirmado ? "paid" : "pending"}`}>
+            <div className="paymentNoticeIcon">
+              {pagoConfirmado ? <CheckCircle2 size={26} /> : <AlertTriangle size={26} />}
+            </div>
+
+            <div className="paymentNoticeText">
+              <p className="sectionEyebrow">Estado de tu inscripción</p>
+              <h2>
+                {pagoConfirmado
+                  ? "Inscripción confirmada"
+                  : "Inscripción pendiente de pago"}
+              </h2>
+              <p>
+                {pagoConfirmado
+                  ? `Tu pago de ${formatearEuros(importePagoUsuario)} aparece confirmado en esta liga.`
+                  : `Tienes pendiente la inscripción de ${formatearEuros(importePagoUsuario)}. Contacta con el administrador de la liga para regularizarla.`}
+              </p>
+            </div>
+          </section>
+        )}
 
         <section className="contextActions">
           <Link href="/mis-pronosticos" className="contextAction primary">
@@ -1524,6 +1586,64 @@ function Styles() {
         font-weight: 850;
       }
 
+      .paymentNotice {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 18px;
+        border-radius: 28px;
+        padding: 20px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(15,23,42,0.76);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+      }
+
+      .paymentNotice.paid {
+        background: linear-gradient(145deg, rgba(34,197,94,0.16), rgba(15,23,42,0.76));
+        border-color: rgba(34,197,94,0.32);
+      }
+
+      .paymentNotice.pending {
+        background: linear-gradient(145deg, rgba(250,204,21,0.16), rgba(15,23,42,0.76));
+        border-color: rgba(250,204,21,0.32);
+      }
+
+      .paymentNoticeIcon {
+        width: 58px;
+        height: 58px;
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.09);
+      }
+
+      .paymentNotice.paid .paymentNoticeIcon {
+        color: #86efac;
+        background: rgba(34,197,94,0.18);
+      }
+
+      .paymentNotice.pending .paymentNoticeIcon {
+        color: #fde68a;
+        background: rgba(250,204,21,0.18);
+      }
+
+      .paymentNoticeText h2 {
+        margin: 0;
+        font-size: clamp(25px, 3vw, 34px);
+        line-height: 1.05;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .paymentNoticeText p:last-child {
+        margin: 9px 0 0;
+        color: #cbd5e1;
+        line-height: 1.55;
+        font-weight: 750;
+      }
+
       .contextActions {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1981,6 +2101,11 @@ function Styles() {
         .prizePanel {
           border-radius: 28px;
           padding: 22px;
+        }
+
+        .paymentNotice {
+          align-items: flex-start;
+          flex-direction: column;
         }
 
         .inputRow {

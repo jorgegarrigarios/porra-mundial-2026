@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  CreditCard,
   Loader2,
   Shield,
   Star,
@@ -83,6 +84,12 @@ export default function AdminHomePage() {
       desc: "Importa jugadores y gestiona el catálogo oficial de bonus.",
       href: "/admin/bonus",
       icon: Star,
+    },
+    {
+      title: "Pagos",
+      desc: "Controla quién ha pagado la inscripción de cada liga.",
+      href: "/admin/pagos",
+      icon: CreditCard,
     },
   ];
 
@@ -207,7 +214,7 @@ export default function AdminHomePage() {
 
         .grid{
           display:grid;
-          grid-template-columns:repeat(4,minmax(0,1fr));
+          grid-template-columns:repeat(5,minmax(0,1fr));
           gap:18px;
         }
 
@@ -261,7 +268,7 @@ export default function AdminHomePage() {
           font-weight:900;
         }
 
-        @media(max-width:1100px){
+        @media(max-width:1180px){
           .grid{
             grid-template-columns:repeat(2,minmax(0,1fr));
           }
