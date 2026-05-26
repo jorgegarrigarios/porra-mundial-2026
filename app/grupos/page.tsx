@@ -257,13 +257,17 @@ export default function GruposPage() {
       return;
     }
 
-    const incompletos = grupos.filter((grupo) => {
+    const gruposConUnSoloClasificado = grupos.filter((grupo) => {
       const pronostico = pronosticos[grupo.grupo];
-      return !pronostico?.clasificado_1 || !pronostico?.clasificado_2;
+
+      const tienePrimero = Boolean(pronostico?.clasificado_1);
+      const tieneSegundo = Boolean(pronostico?.clasificado_2);
+
+      return (tienePrimero && !tieneSegundo) || (!tienePrimero && tieneSegundo);
     });
 
-    if (incompletos.length > 0) {
-      setError("Completa los dos clasificados de cada grupo antes de guardar.");
+    if (gruposConUnSoloClasificado.length > 0) {
+      setError("Si completas un grupo, debes elegir los dos clasificados.");
       return;
     }
 
@@ -286,26 +290,62 @@ export default function GruposPage() {
       setMensaje(null);
       setError(null);
 
-      const payload = grupos.map((grupo) => {
+      const gruposVaciosGuardados = grupos.filter((grupo) => {
         const pronostico = pronosticos[grupo.grupo];
 
-        return {
-          participante_id: participanteId,
-          grupo: grupo.grupo,
-          clasificado_1: pronostico.clasificado_1,
-          clasificado_2: pronostico.clasificado_2,
-        };
+        return (
+          Boolean(pronostico?.id) &&
+          !pronostico?.clasificado_1 &&
+          !pronostico?.clasificado_2
+        );
       });
 
-      const { data, error: guardarError } = await supabase
-        .from("pronosticos_grupos")
-        .upsert(payload, {
-          onConflict: "participante_id,grupo",
-        })
-        .select("id, participante_id, grupo, clasificado_1, clasificado_2, puntos_total");
+      if (gruposVaciosGuardados.length > 0) {
+        const gruposABorrar = gruposVaciosGuardados.map((grupo) => grupo.grupo);
 
-      if (guardarError) {
-        throw new Error(guardarError.message);
+        const { error: borrarError } = await supabase
+          .from("pronosticos_grupos")
+          .delete()
+          .eq("participante_id", participanteId)
+          .in("grupo", gruposABorrar);
+
+        if (borrarError) {
+          throw new Error(borrarError.message);
+        }
+      }
+
+      const payload = grupos
+        .filter((grupo) => {
+          const pronostico = pronosticos[grupo.grupo];
+
+          return Boolean(pronostico?.clasificado_1 && pronostico?.clasificado_2);
+        })
+        .map((grupo) => {
+          const pronostico = pronosticos[grupo.grupo];
+
+          return {
+            participante_id: participanteId,
+            grupo: grupo.grupo,
+            clasificado_1: pronostico.clasificado_1,
+            clasificado_2: pronostico.clasificado_2,
+          };
+        });
+
+      let data: PronosticoGrupoRow[] | null = [];
+
+      if (payload.length > 0) {
+        const { data: upsertData, error: guardarError } = await supabase
+          .from("pronosticos_grupos")
+          .upsert(payload, {
+            onConflict: "participante_id,grupo",
+          })
+          .select("id, participante_id, grupo, clasificado_1, clasificado_2, puntos_total");
+
+        if (guardarError) {
+          throw new Error(guardarError.message);
+        }
+
+        data = (upsertData || []) as PronosticoGrupoRow[];
       }
 
       const actualizados: PronosticosPorGrupo = {};
@@ -318,7 +358,25 @@ export default function GruposPage() {
         const siguiente: PronosticosPorGrupo = {};
 
         grupos.forEach((grupo) => {
-          siguiente[grupo.grupo] = actualizados[grupo.grupo] || actual[grupo.grupo];
+          const pronosticoActual = actual[grupo.grupo];
+
+          if (
+            pronosticoActual?.id &&
+            !pronosticoActual.clasificado_1 &&
+            !pronosticoActual.clasificado_2
+          ) {
+            siguiente[grupo.grupo] = {
+              participante_id: participanteId,
+              grupo: grupo.grupo,
+              clasificado_1: null,
+              clasificado_2: null,
+              puntos_total: 0,
+            };
+
+            return;
+          }
+
+          siguiente[grupo.grupo] = actualizados[grupo.grupo] || pronosticoActual;
         });
 
         return siguiente;
