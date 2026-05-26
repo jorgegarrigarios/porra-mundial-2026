@@ -45,7 +45,9 @@ export default function Navbar() {
   useEffect(() => {
     let mounted = true;
 
-    async function aplicarSesion(session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) {
+    async function aplicarSesion(
+      session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]
+    ) {
       if (!mounted) return;
 
       const user = session?.user;
@@ -188,6 +190,50 @@ export default function Navbar() {
         </div>
       </nav>
 
+      <header className="mobileHeader">
+        <Link href="/" className="mobileBrand" aria-label="Ir al inicio">
+          <img
+            src="/worldcup-logo.png"
+            alt="Mundial 2026"
+            className="mobileBrandLogo"
+          />
+          <span>Porra Mundial</span>
+        </Link>
+
+        <div className="mobileTopActions">
+          {haySesion && nombreVisible && (
+            <div className="mobileUserBadge" title={nombreVisible}>
+              {nombreVisible}
+            </div>
+          )}
+
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={`mobileTopButton ${
+                pathname.startsWith("/admin") ? "activeMobileTopButton" : ""
+              }`}
+              aria-label="Administración"
+            >
+              <Shield size={17} />
+              <span className="mobileTopButtonText">Admin</span>
+            </Link>
+          )}
+
+          {haySesion ? (
+            <button onClick={cerrarSesion} className="mobileTopButton">
+              <LogOut size={17} />
+              <span className="mobileTopButtonText">Salir</span>
+            </button>
+          ) : (
+            <Link href="/login" className="mobileTopButton">
+              <LogIn size={17} />
+              <span className="mobileTopButtonText">Login</span>
+            </Link>
+          )}
+        </div>
+      </header>
+
       <nav
         className="mobileNav"
         style={{
@@ -210,38 +256,6 @@ export default function Navbar() {
           );
         })}
       </nav>
-
-      <div className="mobileTopActions">
-        {haySesion && nombreVisible && (
-          <div className="mobileUserBadge" title={nombreVisible}>
-            {nombreVisible}
-          </div>
-        )}
-
-        {isAdmin && (
-          <Link
-            href="/admin"
-            className={`mobileTopButton ${
-              pathname.startsWith("/admin") ? "activeMobileTopButton" : ""
-            }`}
-          >
-            <Shield size={17} />
-            Admin
-          </Link>
-        )}
-
-        {haySesion ? (
-          <button onClick={cerrarSesion} className="mobileTopButton">
-            <LogOut size={17} />
-            Salir
-          </button>
-        ) : (
-          <Link href="/login" className="mobileTopButton">
-            <LogIn size={17} />
-            Login
-          </Link>
-        )}
-      </div>
 
       <style>{`
         .desktopNav {
@@ -399,8 +413,8 @@ export default function Navbar() {
           filter: brightness(1.08);
         }
 
-        .mobileNav,
-        .mobileTopActions {
+        .mobileHeader,
+        .mobileNav {
           display: none;
         }
 
@@ -444,11 +458,97 @@ export default function Navbar() {
             display: none;
           }
 
+          .mobileHeader {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+            background: rgba(2, 6, 23, 0.94);
+            backdrop-filter: blur(18px);
+            border-bottom: 1px solid rgba(255,255,255,0.10);
+            box-sizing: border-box;
+          }
+
+          .mobileBrand {
+            min-width: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 950;
+            line-height: 1;
+          }
+
+          .mobileBrandLogo {
+            width: 34px;
+            height: 34px;
+            object-fit: contain;
+            flex: 0 0 auto;
+          }
+
+          .mobileBrand span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .mobileTopActions {
+            min-width: 0;
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 0 1 auto;
+          }
+
+          .mobileUserBadge,
+          .mobileTopButton {
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            color: white;
+            text-decoration: none;
+            background: rgba(15,23,42,0.94);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 999px;
+            padding: 0 12px;
+            font-weight: 900;
+            backdrop-filter: blur(18px);
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            line-height: 1;
+            box-sizing: border-box;
+            white-space: nowrap;
+          }
+
+          .mobileUserBadge {
+            max-width: 104px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #dbeafe;
+            background: rgba(37,99,235,0.16);
+            border-color: rgba(96,165,250,0.3);
+          }
+
+          .activeMobileTopButton {
+            background: #dc2626;
+          }
+
           .mobileNav {
             position: fixed;
             left: 12px;
             right: 12px;
-            bottom: 12px;
+            bottom: calc(12px + env(safe-area-inset-bottom));
             z-index: 100;
             display: grid;
             gap: 6px;
@@ -490,54 +590,42 @@ export default function Navbar() {
             box-shadow: 0 0 22px rgba(37,99,235,0.55);
           }
 
-          .mobileTopActions {
-            position: fixed;
-            top: 12px;
-            right: 12px;
-            z-index: 101;
-            display: flex;
-            gap: 8px;
-            align-items: center;
+          body {
+            padding-bottom: calc(104px + env(safe-area-inset-bottom));
+          }
+        }
+
+        @media (max-width: 430px) {
+          .mobileHeader {
+            padding-left: 10px;
+            padding-right: 10px;
           }
 
-          .mobileUserBadge,
-          .mobileTopButton {
-            min-height: 40px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            color: white;
-            text-decoration: none;
-            background: rgba(2,6,23,0.88);
-            border: 1px solid rgba(255,255,255,0.14);
-            border-radius: 999px;
-            padding: 0 12px;
-            font-weight: 900;
-            backdrop-filter: blur(18px);
-            font-family: inherit;
-            font-size: 13px;
-            cursor: pointer;
-            line-height: 1;
-            box-sizing: border-box;
+          .mobileBrand span {
+            display: none;
           }
 
           .mobileUserBadge {
-            max-width: 110px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            color: #dbeafe;
-            background: rgba(37,99,235,0.16);
-            border-color: rgba(96,165,250,0.3);
+            max-width: 92px;
           }
 
-          .activeMobileTopButton {
-            background: #dc2626;
+          .mobileTopButton {
+            padding: 0 10px;
           }
 
-          body {
-            padding-bottom: 94px;
+          .mobileTopButtonText {
+            display: none;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .mobileUserBadge {
+            max-width: 76px;
+          }
+
+          .mobileTopButton {
+            width: 40px;
+            padding: 0;
           }
         }
       `}</style>

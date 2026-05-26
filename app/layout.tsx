@@ -4,7 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://porra-mundial-2026-six.vercel.app"),
+  metadataBase: new URL("https://www.porrafutbol.futbol"),
   title: {
     default: "Porra Mundial 2026",
     template: "%s | Porra Mundial 2026",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     title: "Porra Mundial 2026",
     description:
       "Crea ligas privadas, invita a tus amigos y compite con tus pronósticos en la Porra Mundial 2026.",
-    url: "https://porra-mundial-2026-six.vercel.app",
+    url: "https://www.porrafutbol.futbol",
     siteName: "Porra Mundial 2026",
     images: [
       {
@@ -77,6 +77,7 @@ export default function RootLayout({
         style={{
           margin: 0,
           padding: 0,
+          minHeight: "100vh",
           background: "#020617",
           color: "white",
           fontFamily:
@@ -85,7 +86,14 @@ export default function RootLayout({
       >
         <Navbar />
 
-        <main>{children}</main>
+        <main
+          style={{
+            minHeight: "100vh",
+            paddingTop: "96px",
+          }}
+        >
+          {children}
+        </main>
       </body>
     </html>
   );

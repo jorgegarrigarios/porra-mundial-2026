@@ -1,576 +1,443 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff, Lock, Mail, User, Trophy, AlertCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import {
+  Shield,
+  CheckCircle2,
+  XCircle,
+  Clock3,
+  Users,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
 import { obtenerParticipanteActual } from "@/lib/participante";
 
-type Modo = "login" | "registro" | "recuperar";
+type Participante = {
+  id: number;
+  nombre: string | null;
+  apellidos?: string | null;
+  nickname?: string | null;
+  role?: string | null;
+};
 
-function esperar(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+type Liga = {
+  id: number;
+  nombre: string;
+  codigo: string;
+  estado: string;
+  created_at: string;
+};
 
-async function conTimeout<T>(
-  promesa: Promise<T>,
-  ms: number,
-  mensaje = "La operación ha tardado demasiado."
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+export default function AdminLigasPage() {
+  const [usuario, setUsuario] =
+    useState<Participante | null>(null);
 
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(mensaje));
-    }, ms);
-  });
+  const [ligas, setLigas] = useState<Liga[]>([]);
 
-  try {
-    return await Promise.race([promesa, timeout]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
-}
+  const [loading, setLoading] = useState(true);
 
-async function esperarSesionReal(intentos = 12, pausaMs = 250) {
-  for (let i = 0; i < intentos; i++) {
-    const { data, error } = await supabase.auth.getSession();
+  useEffect(() => {
+    async function cargar() {
+      const participante =
+        await obtenerParticipanteActual();
 
-    if (!error && data.session?.user) {
-      return data.session;
-    }
+      setUsuario(participante);
 
-    await esperar(pausaMs);
-  }
-
-  return null;
-}
-
-function traducirErrorAuth(mensaje: string) {
-  const texto = mensaje.toLowerCase();
-
-  if (texto.includes("invalid login credentials")) {
-    return "Email o contraseña incorrectos.";
-  }
-
-  if (texto.includes("email not confirmed")) {
-    return "Tu email todavía no está confirmado. Revisa tu correo antes de entrar.";
-  }
-
-  if (texto.includes("rate limit")) {
-    return "Has hecho demasiados intentos. Espera un momento y vuelve a probar.";
-  }
-
-  if (texto.includes("timeout") || texto.includes("tardado demasiado")) {
-    return "La conexión ha tardado demasiado. Revisa tu conexión e inténtalo de nuevo.";
-  }
-
-  return mensaje || "No se ha podido completar la operación.";
-}
-
-export default function LoginPage() {
-  const [modo, setModo] = useState<Modo>("login");
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [nombre, setNombre] = useState("");
-  const [apellidos, setApellidos] = useState("");
-  const [nickname, setNickname] = useState("");
-
-  const [aceptaLegal, setAceptaLegal] = useState(false);
-  const [mostrarPassword, setMostrarPassword] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [error, setError] = useState("");
-
-  function limpiarMensajes() {
-    setError("");
-    setMensaje("");
-  }
-
-  function validarEmailPassword() {
-    const emailNormalizado = email.trim().toLowerCase();
-
-    if (!emailNormalizado) {
-      setError("Introduce tu email.");
-      return false;
-    }
-
-    if (!emailNormalizado.includes("@")) {
-      setError("Introduce un email válido.");
-      return false;
-    }
-
-    if (modo !== "recuperar" && !password.trim()) {
-      setError("Introduce tu contraseña.");
-      return false;
-    }
-
-    if (modo !== "recuperar" && password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres.");
-      return false;
-    }
-
-    return true;
-  }
-
-  async function handleLogin() {
-    limpiarMensajes();
-
-    if (!validarEmailPassword()) return;
-
-    setLoading(true);
-
-    try {
-      const emailNormalizado = email.trim().toLowerCase();
-
-      await supabase.auth.signOut();
-
-      const { data, error: loginError } = await conTimeout(
-        supabase.auth.signInWithPassword({
-          email: emailNormalizado,
-          password,
-        }),
-        10000,
-        "El inicio de sesión ha tardado demasiado."
-      );
-
-      if (loginError) {
-        setError(traducirErrorAuth(loginError.message));
+      if (!participante || participante.role !== "admin") {
+        setLoading(false);
         return;
       }
 
-      if (!data.user) {
-        setError("No se ha podido iniciar sesión. Inténtalo de nuevo.");
-        return;
-      }
-
-      const session = await esperarSesionReal();
-
-      if (!session?.user) {
-        setError(
-          "No se ha podido confirmar la sesión. Pulsa de nuevo en Entrar o recarga la página."
-        );
-        return;
-      }
-
-      const participante = await conTimeout(
-        obtenerParticipanteActual(),
-        10000,
-        "La preparación de tu perfil ha tardado demasiado."
-      );
-
-      if (!participante) {
-        setError(
-          "Has iniciado sesión, pero no se ha podido cargar tu perfil de participante. Revisa la tabla participantes/RLS."
-        );
-        return;
-      }
-
-      window.location.href = "/ligas";
-    } catch (err) {
-      console.error("Error login:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? traducirErrorAuth(err.message)
-          : "Ha ocurrido un error iniciando sesión. Inténtalo de nuevo.";
-
-      setError(mensajeError);
-    } finally {
-      setLoading(false);
+      cargarLigas();
     }
+
+    cargar();
+  }, []);
+
+  async function cargarLigas() {
+    const { data } = await supabase
+      .from("ligas")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    setLigas(data ?? []);
+
+    setLoading(false);
   }
 
-  async function handleRegistro() {
-    limpiarMensajes();
+  async function actualizarEstado(
+    ligaId: number,
+    estado: string
+  ) {
+    await supabase
+      .from("ligas")
+      .update({
+        estado,
+      })
+      .eq("id", ligaId);
 
-    if (!validarEmailPassword()) return;
-
-    if (!nombre.trim()) {
-      setError("Introduce tu nombre.");
-      return;
-    }
-
-    if (!apellidos.trim()) {
-      setError("Introduce tus apellidos.");
-      return;
-    }
-
-    if (!nickname.trim()) {
-      setError("Introduce un nickname.");
-      return;
-    }
-
-    if (!aceptaLegal) {
-      setError("Debes aceptar la política de privacidad y los términos.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const emailNormalizado = email.trim().toLowerCase();
-
-      const { data, error: registroError } = await conTimeout(
-        supabase.auth.signUp({
-          email: emailNormalizado,
-          password,
-          options: {
-            data: {
-              nombre: nombre.trim(),
-              apellidos: apellidos.trim(),
-              nickname: nickname.trim(),
-            },
-          },
-        }),
-        10000,
-        "El registro ha tardado demasiado."
-      );
-
-      if (registroError) {
-        setError(traducirErrorAuth(registroError.message));
-        return;
-      }
-
-      if (data.session?.user) {
-        const participante = await conTimeout(
-          obtenerParticipanteActual(),
-          10000,
-          "La preparación de tu perfil ha tardado demasiado."
-        );
-
-        if (!participante) {
-          setError(
-            "Cuenta creada, pero no se ha podido preparar tu perfil. Revisa participantes/RLS."
-          );
-          return;
-        }
-
-        window.location.href = "/ligas";
-        return;
-      }
-
-      setMensaje(
-        "Cuenta creada. Revisa tu email para confirmar el registro antes de iniciar sesión."
-      );
-      setModo("login");
-    } catch (err) {
-      console.error("Error registro:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? traducirErrorAuth(err.message)
-          : "Ha ocurrido un error creando la cuenta. Inténtalo de nuevo.";
-
-      setError(mensajeError);
-    } finally {
-      setLoading(false);
-    }
+    cargarLigas();
   }
 
-  async function handleRecuperarPassword() {
-    limpiarMensajes();
-
-    if (!email.trim()) {
-      setError("Introduce tu email.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const emailNormalizado = email.trim().toLowerCase();
-
-      const { error: recuperarError } = await conTimeout(
-        supabase.auth.resetPasswordForEmail(emailNormalizado, {
-          redirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/login`
-              : undefined,
-        }),
-        10000,
-        "La recuperación de contraseña ha tardado demasiado."
-      );
-
-      if (recuperarError) {
-        setError(traducirErrorAuth(recuperarError.message));
-        return;
-      }
-
-      setMensaje("Te hemos enviado un email para recuperar la contraseña.");
-    } catch (err) {
-      console.error("Error recuperación:", err);
-
-      const mensajeError =
-        err instanceof Error
-          ? traducirErrorAuth(err.message)
-          : "Ha ocurrido un error enviando el email de recuperación.";
-
-      setError(mensajeError);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-
-    if (loading) return;
-
-    if (modo === "login") {
-      await handleLogin();
-      return;
-    }
-
-    if (modo === "registro") {
-      await handleRegistro();
-      return;
-    }
-
-    await handleRecuperarPassword();
-  }
-
-  async function handleReintentarLogin() {
-    if (loading) return;
-
-    if (modo !== "login") {
-      setModo("login");
-      return;
-    }
-
-    await handleLogin();
-  }
-
-  const titulo =
-    modo === "login"
-      ? "Entrar en la porra"
-      : modo === "registro"
-        ? "Crear cuenta"
-        : "Recuperar contraseña";
-
-  const subtitulo =
-    modo === "login"
-      ? "Accede a tus ligas, pronósticos y rankings privados."
-      : modo === "registro"
-        ? "Crea tu usuario para competir en la Porra Mundial 2026."
-        : "Introduce tu email y te enviaremos un enlace de recuperación.";
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-white px-4 py-10 flex items-center justify-center">
-      <section className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-500/20 border border-blue-400/30 shadow-2xl shadow-blue-500/20">
-            <Trophy className="h-8 w-8 text-blue-300" />
+  if (loading) {
+    return (
+      <main className="page">
+        <div className="container">
+          <div className="emptyBox">
+            Cargando panel admin...
           </div>
-
-          <h1 className="text-3xl font-black tracking-tight">{titulo}</h1>
-          <p className="mt-3 text-sm text-slate-400">{subtitulo}</p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 shadow-2xl backdrop-blur"
-        >
-          {error && (
-            <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
-              <div className="flex gap-2">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="w-full">
-                  <p>{error}</p>
+        <Styles />
+      </main>
+    );
+  }
 
-                  {modo === "login" && (
-                    <button
-                      type="button"
-                      onClick={handleReintentarLogin}
-                      disabled={loading}
-                      className="mt-3 rounded-xl bg-red-400/20 px-3 py-2 text-xs font-bold text-red-100 hover:bg-red-400/30 disabled:opacity-60"
-                    >
-                      Reintentar login
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+  if (!usuario || usuario.role !== "admin") {
+    return (
+      <main className="page">
+        <div className="container">
+          <div className="blockedCard">
+            <Shield size={40} />
 
-          {mensaje && (
-            <div className="mb-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-              {mensaje}
-            </div>
-          )}
+            <h1>Acceso restringido</h1>
 
-          {modo === "registro" && (
-            <>
-              <label className="mb-3 block">
-                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                  Nombre
-                </span>
-                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
-                  <User className="h-4 w-4 text-slate-500" />
-                  <input
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
-                    placeholder="Tu nombre"
-                    autoComplete="given-name"
-                  />
-                </div>
-              </label>
-
-              <label className="mb-3 block">
-                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                  Apellidos
-                </span>
-                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
-                  <User className="h-4 w-4 text-slate-500" />
-                  <input
-                    value={apellidos}
-                    onChange={(e) => setApellidos(e.target.value)}
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
-                    placeholder="Tus apellidos"
-                    autoComplete="family-name"
-                  />
-                </div>
-              </label>
-
-              <label className="mb-3 block">
-                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                  Nickname
-                </span>
-                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
-                  <Trophy className="h-4 w-4 text-slate-500" />
-                  <input
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
-                    placeholder="Ej: Garrigt"
-                    autoComplete="nickname"
-                  />
-                </div>
-              </label>
-            </>
-          )}
-
-          <label className="mb-3 block">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
-              Email
-            </span>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
-              <Mail className="h-4 w-4 text-slate-500" />
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
-                placeholder="tu@email.com"
-                type="email"
-                autoComplete="email"
-              />
-            </div>
-          </label>
-
-          {modo !== "recuperar" && (
-            <label className="mb-4 block">
-              <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                Contraseña
-              </span>
-              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
-                <Lock className="h-4 w-4 text-slate-500" />
-                <input
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"
-                  placeholder="Mínimo 6 caracteres"
-                  type={mostrarPassword ? "text" : "password"}
-                  autoComplete={modo === "login" ? "current-password" : "new-password"}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarPassword((prev) => !prev)}
-                  className="text-slate-400 hover:text-white"
-                  aria-label="Mostrar u ocultar contraseña"
-                >
-                  {mostrarPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </label>
-          )}
-
-          {modo === "registro" && (
-            <label className="mb-4 flex items-start gap-3 text-xs text-slate-400">
-              <input
-                type="checkbox"
-                checked={aceptaLegal}
-                onChange={(e) => setAceptaLegal(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                Acepto la política de privacidad y los términos de uso de la Porra Mundial.
-              </span>
-            </label>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-xl shadow-blue-500/25 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading
-              ? "Entrando..."
-              : modo === "login"
-                ? "Entrar"
-                : modo === "registro"
-                  ? "Crear cuenta"
-                  : "Enviar recuperación"}
-          </button>
-
-          <div className="mt-5 flex flex-col gap-2 text-center text-sm">
-            {modo !== "login" && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarMensajes();
-                  setModo("login");
-                }}
-                className="text-blue-300 hover:text-blue-200"
-              >
-                Ya tengo cuenta
-              </button>
-            )}
-
-            {modo !== "registro" && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarMensajes();
-                  setModo("registro");
-                }}
-                className="text-slate-300 hover:text-white"
-              >
-                Crear cuenta nueva
-              </button>
-            )}
-
-            {modo !== "recuperar" && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarMensajes();
-                  setModo("recuperar");
-                }}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                He olvidado mi contraseña
-              </button>
-            )}
+            <p>
+              Necesitas permisos de administrador.
+            </p>
           </div>
-        </form>
-      </section>
+        </div>
+
+        <Styles />
+      </main>
+    );
+  }
+
+  return (
+    <main className="page">
+      <div className="container">
+        <div className="header">
+          <div className="headerIcon">
+            <Shield size={34} />
+          </div>
+
+          <div>
+            <h1>Moderación de ligas</h1>
+
+            <p>
+              Gestiona solicitudes y aprobación de ligas privadas.
+            </p>
+          </div>
+        </div>
+
+        {ligas.length === 0 ? (
+          <div className="emptyBox">
+            No hay ligas registradas.
+          </div>
+        ) : (
+          <div className="leagueList">
+            {ligas.map((liga) => (
+              <article key={liga.id} className="leagueCard">
+                <div className="topRow">
+                  <div>
+                    <p className="label">Liga</p>
+
+                    <h2>{liga.nombre}</h2>
+                  </div>
+
+                  <div className="codeBox">
+                    {liga.codigo}
+                  </div>
+                </div>
+
+                <div className="statusRow">
+                  {liga.estado === "pendiente" && (
+                    <div className="status pending">
+                      <Clock3 size={16} />
+                      Pendiente
+                    </div>
+                  )}
+
+                  {liga.estado === "activa" && (
+                    <div className="status active">
+                      <CheckCircle2 size={16} />
+                      Activa
+                    </div>
+                  )}
+
+                  {liga.estado === "rechazada" && (
+                    <div className="status rejected">
+                      <XCircle size={16} />
+                      Rechazada
+                    </div>
+                  )}
+                </div>
+
+                <div className="actions">
+                  <button
+                    className="approveButton"
+                    onClick={() =>
+                      actualizarEstado(
+                        liga.id,
+                        "activa"
+                      )
+                    }
+                  >
+                    <CheckCircle2 size={18} />
+                    Aprobar
+                  </button>
+
+                  <button
+                    className="rejectButton"
+                    onClick={() =>
+                      actualizarEstado(
+                        liga.id,
+                        "rechazada"
+                      )
+                    }
+                  >
+                    <XCircle size={18} />
+                    Rechazar
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Styles />
     </main>
+  );
+}
+
+function Styles() {
+  return (
+    <style>{`
+      .page {
+        min-height: 100vh;
+
+        background:
+          radial-gradient(circle at top, rgba(220,38,38,0.18), transparent 30%),
+          linear-gradient(180deg, #020617 0%, #111827 100%);
+
+        color: white;
+
+        padding: 36px 16px 120px;
+      }
+
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+
+        margin-bottom: 30px;
+      }
+
+      .headerIcon {
+        width: 74px;
+        height: 74px;
+
+        border-radius: 24px;
+
+        background: #dc2626;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .header h1 {
+        font-size: 44px;
+        font-weight: 900;
+        margin: 0;
+      }
+
+      .header p {
+        color: #94a3b8;
+        margin-top: 6px;
+      }
+
+      .leagueList {
+        display: grid;
+        gap: 18px;
+      }
+
+      .leagueCard {
+        background:
+          linear-gradient(
+            145deg,
+            rgba(15,23,42,0.98),
+            rgba(15,23,42,0.65)
+          );
+
+        border: 1px solid rgba(255,255,255,0.12);
+
+        border-radius: 28px;
+
+        padding: 24px;
+      }
+
+      .topRow {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        gap: 20px;
+      }
+
+      .label {
+        color: #94a3b8;
+
+        font-size: 12px;
+
+        text-transform: uppercase;
+
+        letter-spacing: 1px;
+
+        font-weight: 900;
+      }
+
+      .leagueCard h2 {
+        font-size: 30px;
+        font-weight: 900;
+
+        margin-top: 8px;
+      }
+
+      .codeBox {
+        background: rgba(255,255,255,0.08);
+
+        border: 1px solid rgba(255,255,255,0.12);
+
+        border-radius: 16px;
+
+        padding: 14px 18px;
+
+        font-weight: 900;
+
+        letter-spacing: 2px;
+      }
+
+      .statusRow {
+        margin-top: 18px;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+
+        border-radius: 999px;
+
+        padding: 8px 12px;
+
+        font-size: 13px;
+
+        font-weight: 900;
+      }
+
+      .status.active {
+        background: rgba(22,163,74,0.18);
+        border: 1px solid rgba(22,163,74,0.35);
+        color: #86efac;
+      }
+
+      .status.pending {
+        background: rgba(250,204,21,0.16);
+        border: 1px solid rgba(250,204,21,0.28);
+        color: #fde68a;
+      }
+
+      .status.rejected {
+        background: rgba(239,68,68,0.16);
+        border: 1px solid rgba(239,68,68,0.28);
+        color: #fca5a5;
+      }
+
+      .actions {
+        display: flex;
+        gap: 14px;
+
+        margin-top: 24px;
+      }
+
+      .approveButton,
+      .rejectButton {
+        flex: 1;
+
+        border: none;
+
+        border-radius: 16px;
+
+        padding: 15px;
+
+        font-weight: 900;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+
+        cursor: pointer;
+      }
+
+      .approveButton {
+        background: #16a34a;
+        color: white;
+      }
+
+      .rejectButton {
+        background: #dc2626;
+        color: white;
+      }
+
+      .emptyBox,
+      .blockedCard {
+        background: rgba(255,255,255,0.06);
+
+        border: 1px solid rgba(255,255,255,0.10);
+
+        border-radius: 28px;
+
+        padding: 28px;
+
+        text-align: center;
+
+        color: #94a3b8;
+
+        font-weight: 900;
+      }
+
+      .blockedCard h1 {
+        color: white;
+        margin-top: 18px;
+      }
+
+      .blockedCard p {
+        margin-top: 8px;
+      }
+
+      @media (max-width: 760px) {
+        .topRow {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .actions {
+          flex-direction: column;
+        }
+
+        .header h1 {
+          font-size: 34px;
+        }
+      }
+    `}</style>
   );
 }
