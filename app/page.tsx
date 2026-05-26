@@ -1155,33 +1155,93 @@ export default function Home() {
 
         @media (max-width: 560px) {
           .hero {
-            padding: 28px 16px 24px;
+            min-height: calc(100svh - 84px);
+            justify-content: flex-start;
+            padding: 32px 18px 108px;
+          }
+
+          .stadium {
+            background-position: center top;
+          }
+
+          .overlay {
+            background:
+              radial-gradient(circle at 50% 57%, rgba(250,204,21,0.22), transparent 22%),
+              radial-gradient(circle at 18% 40%, rgba(249,115,22,0.18), transparent 28%),
+              radial-gradient(circle at 88% 28%, rgba(59,130,246,0.25), transparent 26%),
+              linear-gradient(180deg, rgba(2,6,23,0.94) 0%, rgba(2,6,23,0.74) 28%, rgba(2,6,23,0.42) 62%, rgba(2,6,23,0.70) 100%);
+          }
+
+          .heroContent {
+            gap: 18px;
+            min-height: calc(100svh - 224px);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
           }
 
           .versionLine {
-            font-size: 10px;
-            letter-spacing: 0.12em;
+            display: none;
+          }
+
+          .heroTextColumn {
+            width: 100%;
+            padding-top: 24px;
           }
 
           .heroTitle {
-            font-size: 46px;
+            font-size: clamp(50px, 13.8vw, 62px);
+            line-height: 0.95;
+            letter-spacing: -0.07em;
+          }
+
+          .heroTitle span {
+            margin-top: 4px;
           }
 
           .heroText {
-            font-size: 16px;
+            font-size: 17px;
+            line-height: 1.52;
+            max-width: 92%;
+            margin-top: 18px;
+          }
+
+          .buttonRow {
+            gap: 12px;
+            margin-top: 26px;
+          }
+
+          .primaryButton,
+          .secondaryButton {
+            min-height: 64px;
+            border-radius: 22px;
+            font-size: 18px;
+            padding: 16px 18px;
+          }
+
+          .logoScene {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .logoGlow {
+            width: min(100%, 360px);
+            opacity: 0.9;
+          }
+
+          .worldLogo {
+            width: min(96%, 360px);
+            max-height: min(42svh, 420px);
+            transform: translateY(-8px);
           }
 
           .heroStats {
-            grid-template-columns: 1fr;
-          }
-
-          .statCard {
-            border-right: none !important;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-          }
-
-          .statCard:last-child {
-            border-bottom: none;
+            display: none;
           }
 
           .contentWrap {
@@ -1211,6 +1271,37 @@ export default function Home() {
 
           .finalText {
             flex-direction: column;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .hero {
+            padding-left: 14px;
+            padding-right: 14px;
+          }
+
+          .heroTextColumn {
+            padding-top: 14px;
+          }
+
+          .heroTitle {
+            font-size: 46px;
+          }
+
+          .heroText {
+            font-size: 15px;
+            max-width: 96%;
+          }
+
+          .primaryButton,
+          .secondaryButton {
+            min-height: 58px;
+            font-size: 16px;
+          }
+
+          .worldLogo {
+            width: min(92%, 310px);
+            max-height: min(38svh, 360px);
           }
         }
       `}</style>
