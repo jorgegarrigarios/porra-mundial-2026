@@ -18,6 +18,8 @@ import {
   Award,
   Lock,
   Sparkles,
+  Medal,
+  Gamepad2,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -147,18 +149,21 @@ export default function Home() {
         <div className="overlay" />
 
         <div className="heroContent">
-          <div>
-            <p className="eyebrow">Porra Mundial 2026 · V1.2 Beta</p>
+          <div className="heroTextColumn">
+            <div className="topPill">
+              <Sparkles size={16} />
+              Porra Mundial 2026 · V1.2 Beta
+            </div>
 
             <h1 className="heroTitle">
-              Compite con tus amigos
+              Porra Mundial
               <br />
-              <span>en el Mundial</span>
+              <span>2026</span>
             </h1>
 
             <p className="heroText">
-              Crea una liga privada, haz tus pronósticos, elige tus bonus y
-              demuestra quién sabe más de fútbol durante todo el Mundial 2026.
+              Compite con tus amigos en ligas privadas, haz tus pronósticos,
+              elige tus bonus y demuestra quién sabe más de fútbol.
             </p>
 
             <div className="buttonRow">
@@ -180,7 +185,7 @@ export default function Home() {
               </span>
               <span>
                 <Flag size={15} />
-                Grupos 1X2
+                Fase de grupos 1X2
               </span>
               <span>
                 <Award size={15} />
@@ -189,12 +194,30 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="logoWrap">
-            <img
-              src="/worldcup-logo.png"
-              alt="Mundial 2026"
-              className="worldLogo"
-            />
+          <div className="heroShowcase" aria-label="Resumen de la porra">
+            <div className="logoCard">
+              <img
+                src="/worldcup-logo.png"
+                alt="Mundial 2026"
+                className="worldLogo"
+              />
+            </div>
+
+            <div className="floatingCard floatingCardTop">
+              <div>
+                <p>Formato</p>
+                <strong>1 porra</strong>
+              </div>
+              <span>para todas tus ligas</span>
+            </div>
+
+            <div className="floatingCard floatingCardBottom">
+              <div>
+                <p>Ranking</p>
+                <strong>en directo</strong>
+              </div>
+              <span>partidos + grupos + bonus</span>
+            </div>
           </div>
         </div>
       </section>
@@ -289,6 +312,26 @@ export default function Home() {
             color="#f59e0b"
           />
         </div>
+
+        <section className="howItWorks">
+          <div className="stepCard">
+            <div className="stepNumber">1</div>
+            <h3>Crea o entra en una liga</h3>
+            <p>Compite en grupos privados con tus amigos, familia o compañeros.</p>
+          </div>
+
+          <div className="stepCard">
+            <div className="stepNumber">2</div>
+            <h3>Completa tu porra</h3>
+            <p>Partidos, clasificados de grupo y bonus oficiales del Mundial.</p>
+          </div>
+
+          <div className="stepCard">
+            <div className="stepNumber">3</div>
+            <h3>Sigue el ranking</h3>
+            <p>Los puntos se van sumando y cada liga tiene su clasificación.</p>
+          </div>
+        </section>
 
         <h2 className="sectionTitle">Próximo partido destacado</h2>
 
@@ -389,7 +432,7 @@ export default function Home() {
             </h2>
 
             <InfoRow
-              icon={<Flag size={22} />}
+              icon={<Gamepad2 size={22} />}
               color="#2563eb"
               title="Fase de grupos"
               text="Pronóstico 1X2. Acierto del signo: 3 puntos."
@@ -403,7 +446,7 @@ export default function Home() {
             />
 
             <InfoRow
-              icon={<Award size={22} />}
+              icon={<Medal size={22} />}
               color="#7c3aed"
               title="Bonus oficiales"
               text="Campeón, finalistas, goleador, MVP, portero, revelación y decepción."
@@ -446,8 +489,10 @@ export default function Home() {
 
         .hero {
           position: relative;
-          min-height: 88vh;
           overflow: hidden;
+          min-height: 760px;
+          display: flex;
+          align-items: center;
         }
 
         .stadium {
@@ -465,34 +510,47 @@ export default function Home() {
           inset: 0;
           background:
             radial-gradient(circle at 75% 15%, rgba(37,99,235,0.34), transparent 28%),
-            linear-gradient(90deg, rgba(2,6,23,0.94) 0%, rgba(2,6,23,0.72) 42%, rgba(2,6,23,0.24) 100%);
+            radial-gradient(circle at 18% 85%, rgba(250,204,21,0.12), transparent 26%),
+            linear-gradient(90deg, rgba(2,6,23,0.96) 0%, rgba(2,6,23,0.74) 43%, rgba(2,6,23,0.30) 100%);
         }
 
         .heroContent {
           position: relative;
           z-index: 2;
+          width: 100%;
           max-width: 1280px;
           margin: 0 auto;
-          padding: 90px 24px 40px;
+          padding: 110px 24px 110px;
           display: grid;
-          grid-template-columns: 1.1fr 0.9fr;
+          grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
           align-items: center;
-          gap: 50px;
+          gap: 54px;
         }
 
-        .eyebrow {
-          color: #93c5fd;
+        .heroTextColumn {
+          min-width: 0;
+        }
+
+        .topPill {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid rgba(147,197,253,0.28);
+          background: rgba(37,99,235,0.14);
+          color: #bfdbfe;
+          border-radius: 999px;
+          padding: 9px 13px;
+          font-size: 12px;
           font-weight: 950;
-          letter-spacing: 4px;
+          letter-spacing: 0.16em;
           text-transform: uppercase;
-          margin-bottom: 26px;
-          font-size: 13px;
+          margin-bottom: 24px;
         }
 
         .heroTitle {
-          font-size: clamp(54px, 8vw, 96px);
+          font-size: clamp(58px, 8vw, 104px);
           line-height: 0.92;
-          letter-spacing: -0.06em;
+          letter-spacing: -0.075em;
           font-weight: 950;
           margin: 0;
         }
@@ -504,13 +562,14 @@ export default function Home() {
         .heroText {
           margin-top: 28px;
           color: #d1d5db;
-          font-size: 23px;
+          font-size: 22px;
           line-height: 1.55;
           max-width: 690px;
         }
 
         .buttonRow {
           display: flex;
+          flex-wrap: wrap;
           gap: 18px;
           margin-top: 42px;
         }
@@ -527,6 +586,7 @@ export default function Home() {
           text-decoration: none;
           font-weight: 950;
           font-size: 17px;
+          min-height: 56px;
         }
 
         .primaryButton {
@@ -539,11 +599,18 @@ export default function Home() {
           border: 1px solid rgba(255,255,255,0.14);
         }
 
+        .primaryButton:hover,
+        .secondaryButton:hover,
+        .outlineButton:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.08);
+        }
+
         .heroBadges {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          margin-top: 22px;
+          margin-top: 28px;
         }
 
         .heroBadges span {
@@ -551,7 +618,7 @@ export default function Home() {
           align-items: center;
           gap: 7px;
           border: 1px solid rgba(255,255,255,0.12);
-          background: rgba(15,23,42,0.62);
+          background: rgba(15,23,42,0.72);
           color: #dbeafe;
           border-radius: 999px;
           padding: 9px 12px;
@@ -559,29 +626,92 @@ export default function Home() {
           font-weight: 900;
         }
 
-        .logoWrap {
+        .heroShowcase {
+          position: relative;
           display: flex;
+          align-items: center;
           justify-content: center;
+          min-width: 0;
+        }
+
+        .logoCard {
+          width: min(100%, 500px);
+          aspect-ratio: 1 / 1;
+          border-radius: 40px;
+          background:
+            radial-gradient(circle at 50% 35%, rgba(250,204,21,0.22), transparent 30%),
+            rgba(255,255,255,0.96);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow:
+            0 34px 90px rgba(0,0,0,0.36),
+            0 0 80px rgba(250,204,21,0.16);
+          padding: 36px;
         }
 
         .worldLogo {
           width: 100%;
-          max-width: 560px;
+          max-width: 420px;
           object-fit: contain;
-          filter: drop-shadow(0 0 55px rgba(255,215,0,0.38));
+          filter: drop-shadow(0 0 34px rgba(255,215,0,0.32));
+        }
+
+        .floatingCard {
+          position: absolute;
+          width: 230px;
+          border-radius: 22px;
+          border: 1px solid rgba(255,255,255,0.16);
+          background: rgba(15,23,42,0.84);
+          backdrop-filter: blur(16px);
+          padding: 16px;
+          box-shadow: 0 22px 55px rgba(0,0,0,0.28);
+        }
+
+        .floatingCardTop {
+          top: 28px;
+          left: -18px;
+        }
+
+        .floatingCardBottom {
+          right: -12px;
+          bottom: 36px;
+        }
+
+        .floatingCard p {
+          margin: 0 0 4px;
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .floatingCard strong {
+          display: block;
+          font-size: 24px;
+          font-weight: 950;
+          letter-spacing: -0.04em;
+        }
+
+        .floatingCard span {
+          display: block;
+          color: #cbd5e1;
+          margin-top: 4px;
+          font-size: 13px;
+          font-weight: 750;
         }
 
         .contentWrap {
           max-width: 1280px;
           margin: 0 auto;
-          padding: 0 24px 90px;
+          padding: 42px 24px 90px;
         }
 
         .statsGrid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 18px;
-          margin-top: -70px;
           position: relative;
           z-index: 3;
         }
@@ -590,11 +720,12 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 16px;
-          background: rgba(15,23,42,0.86);
+          background: rgba(15,23,42,0.90);
           border: 1px solid rgba(255,255,255,0.12);
           backdrop-filter: blur(18px);
           border-radius: 24px;
           padding: 22px;
+          min-width: 0;
         }
 
         .iconBox {
@@ -678,7 +809,7 @@ export default function Home() {
 
         .quickGrid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 20px;
         }
 
@@ -703,6 +834,47 @@ export default function Home() {
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+
+        .howItWorks {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 18px;
+          margin-top: 26px;
+        }
+
+        .stepCard {
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(15,23,42,0.72);
+          border-radius: 26px;
+          padding: 22px;
+        }
+
+        .stepNumber {
+          width: 38px;
+          height: 38px;
+          border-radius: 14px;
+          background: rgba(37,99,235,0.22);
+          border: 1px solid rgba(96,165,250,0.30);
+          color: #bfdbfe;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 950;
+          margin-bottom: 14px;
+        }
+
+        .stepCard h3 {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 950;
+        }
+
+        .stepCard p {
+          margin: 8px 0 0;
+          color: #cbd5e1;
+          line-height: 1.55;
+          font-weight: 750;
         }
 
         .featuredMatch {
@@ -934,21 +1106,39 @@ export default function Home() {
           flex-shrink: 0;
         }
 
-        @media (max-width: 1080px) {
+        @media (max-width: 1180px) {
+          .heroContent {
+            grid-template-columns: 1fr 0.82fr;
+          }
+
+          .logoCard {
+            width: min(100%, 390px);
+          }
+
+          .floatingCard {
+            display: none;
+          }
+
           .quickGrid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
         @media (max-width: 900px) {
           .hero {
             min-height: auto;
+            display: block;
           }
 
           .heroContent {
             grid-template-columns: 1fr;
-            padding: 56px 20px 90px;
+            padding: 64px 20px 76px;
             text-align: center;
+            gap: 36px;
+          }
+
+          .heroTitle {
+            font-size: clamp(48px, 13vw, 70px);
           }
 
           .heroText {
@@ -970,18 +1160,27 @@ export default function Home() {
             justify-content: center;
           }
 
-          .worldLogo {
-            max-width: 280px;
+          .logoCard {
+            max-width: 270px;
+            border-radius: 32px;
+            padding: 26px;
+          }
+
+          .contentWrap {
+            padding-top: 28px;
           }
 
           .statsGrid {
             grid-template-columns: 1fr 1fr;
-            margin-top: -46px;
           }
 
           .versionPanel {
             flex-direction: column;
             align-items: stretch;
+          }
+
+          .howItWorks {
+            grid-template-columns: 1fr;
           }
 
           .featuredMatch {
@@ -1017,13 +1216,21 @@ export default function Home() {
             padding-right: 16px;
           }
 
-          .eyebrow {
-            font-size: 11px;
-            letter-spacing: 3px;
+          .heroContent {
+            padding: 50px 16px 58px;
+          }
+
+          .topPill {
+            font-size: 10px;
+            letter-spacing: 0.12em;
           }
 
           .heroTitle {
-            font-size: 44px;
+            font-size: 46px;
+          }
+
+          .heroText {
+            font-size: 16px;
           }
 
           .statsGrid {
@@ -1044,6 +1251,14 @@ export default function Home() {
 
           .versionPanel h2 {
             font-size: 25px;
+          }
+
+          .matchTime {
+            font-size: 34px;
+          }
+
+          .finalText {
+            flex-direction: column;
           }
         }
       `}</style>
