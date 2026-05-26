@@ -1,32 +1,41 @@
+function getApiFootballKey(): string {
+  const apiKey = process.env.API_FOOTBALL_KEY;
+
+  if (!apiKey) {
+    throw new Error("Falta API_FOOTBALL_KEY en las variables de entorno");
+  }
+
+  return apiKey;
+}
+
 const API_URL = "https://v3.football.api-sports.io";
 
-async function apiFootballFetch(endpoint: string) {
-  const response = await fetch(`${API_URL}${endpoint}`, {
+export async function footballFetch(path: string) {
+  const apiKey = getApiFootballKey();
+
+  const res = await fetch(`${API_URL}${path}`, {
     headers: {
-      "x-apisports-key": process.env.FOOTBALL_API_KEY || "",
+      "x-apisports-key": apiKey,
     },
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Error API Football: ${response.status}`);
+  if (!res.ok) {
+    throw new Error(`Football API error: ${res.status}`);
   }
 
-  return response.json();
-}
-
-export async function buscarLigas(nombre: string) {
-  const data = await apiFootballFetch(`/leagues?search=${nombre}`);
-  return data.response;
+  return res.json();
 }
 
 export async function obtenerPartidosPorLigaTemporada(
-  leagueId: number,
-  season: number
+  ligaId: number,
+  temporada: number
 ) {
-  const data = await apiFootballFetch(
-    `/fixtures?league=${leagueId}&season=${season}`
-  );
+  return footballFetch(`/fixtures?league=${ligaId}&season=${temporada}`);
+}
 
-  return data.response;
+export async function obtenerPlantilla(teamId: number) {
+  const data = await footballFetch(`/players/squads?team=${teamId}`);
+
+  return data?.response?.[0]?.players ?? [];
 }

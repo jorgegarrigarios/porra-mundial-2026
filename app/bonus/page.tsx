@@ -19,6 +19,11 @@ import {
 import { obtenerParticipanteActual } from "@/lib/participante";
 import { supabase } from "@/lib/supabase";
 
+type JugadorOption = {
+  nombre_oficial: string;
+  seleccion: string;
+};
+
 type BonusRow = {
   id?: number;
   participante_id: number;
@@ -136,6 +141,7 @@ export default function BonusPage() {
   const [participanteId, setParticipanteId] = useState<number | null>(null);
   const [selecciones, setSelecciones] = useState<string[]>([]);
   const [seleccionesDecepcion, setSeleccionesDecepcion] = useState<string[]>([]);
+  const [jugadores, setJugadores] = useState<JugadorOption[]>([]);
   const [bonus, setBonus] = useState<BonusRow>(bonusInicial);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -191,9 +197,14 @@ export default function BonusPage() {
 
         setParticipanteId(participante.id);
 
-        const [{ data: partidosData, error: partidosError }, { data: bonusData, error: bonusError }] =
+        const [{ data: partidosData, error: partidosError }, { data: jugadoresData, error: jugadoresError }, { data: bonusData, error: bonusError }] =
           await Promise.all([
             supabase.from("partidos").select("local, visitante, fase, grupo"),
+            supabase
+              .from("jugadores")
+              .select("nombre_oficial, seleccion")
+              .eq("activo", true)
+              .order("nombre_oficial"),
             supabase
               .from("pronosticos_bonus")
               .select(
@@ -207,6 +218,10 @@ export default function BonusPage() {
 
         if (partidosError) {
           throw new Error(partidosError.message);
+        }
+
+        if (jugadoresError) {
+          throw new Error(jugadoresError.message);
         }
 
         if (bonusError) {
@@ -230,6 +245,7 @@ export default function BonusPage() {
 
         setSelecciones(equipos);
         setSeleccionesDecepcion(cabezas);
+        setJugadores((jugadoresData || []) as JugadorOption[]);
 
         if (bonusData) {
           setBonus(bonusData as BonusRow);
@@ -278,9 +294,50 @@ export default function BonusPage() {
     }));
   }
 
+  function jugadorExisteEnCatalogo(valor: string | null) {
+    const nombre = valor?.trim();
+
+    if (!nombre) return true;
+
+    return jugadores.some(
+      (jugador) =>
+        jugador.nombre_oficial.trim().toLowerCase() === nombre.toLowerCase()
+    );
+  }
+
+  function validarJugadoresBonus() {
+    const errores: string[] = [];
+
+    if (!jugadorExisteEnCatalogo(bonus.bota_oro)) {
+      errores.push("Bota de Oro");
+    }
+
+    if (!jugadorExisteEnCatalogo(bonus.mejor_jugador)) {
+      errores.push("Mejor jugador");
+    }
+
+    if (!jugadorExisteEnCatalogo(bonus.mejor_portero)) {
+      errores.push("Mejor portero");
+    }
+
+    return errores;
+  }
+
   async function guardarBonus() {
     if (!participanteId) {
       setError("No se ha podido identificar tu usuario.");
+      return;
+    }
+
+    const erroresJugadores = validarJugadoresBonus();
+
+    if (erroresJugadores.length > 0) {
+      setMensaje(null);
+      setError(
+        `Revisa estos campos: ${erroresJugadores.join(
+          ", "
+        )}. Debes elegir un jugador del listado oficial.`
+      );
       return;
     }
 
@@ -418,7 +475,8 @@ export default function BonusPage() {
             onFinalista2={(valor) => actualizarSeleccion("finalista_2", valor)}
           />
 
-          <BonusInput
+          <BonusAutocomplete
+            jugadores={jugadores}
             icono={<Goal className="h-5 w-5" />}
             titulo="Bota de Oro"
             descripcion="14 puntos si aciertas el máximo goleador. 5 puntos si queda top 3."
@@ -427,7 +485,8 @@ export default function BonusPage() {
             onChange={(valor) => actualizarTexto("bota_oro", valor)}
           />
 
-          <BonusInput
+          <BonusAutocomplete
+            jugadores={jugadores}
             icono={<Star className="h-5 w-5" />}
             titulo="Mejor jugador"
             descripcion="10 puntos si aciertas el mejor jugador del Mundial."
@@ -436,7 +495,8 @@ export default function BonusPage() {
             onChange={(valor) => actualizarTexto("mejor_jugador", valor)}
           />
 
-          <BonusInput
+          <BonusAutocomplete
+            jugadores={jugadores}
             icono={<Shield className="h-5 w-5" />}
             titulo="Mejor portero"
             descripcion="8 puntos si aciertas el mejor portero del Mundial."
@@ -549,7 +609,9 @@ function BonusSelect({
   );
 }
 
-function BonusInput({
+function BonusAutocomplete({
+  jugadores,
+
   icono,
   titulo,
   descripcion,
@@ -557,6 +619,7 @@ function BonusInput({
   value,
   onChange,
 }: {
+  jugadores: JugadorOption[];
   icono: React.ReactNode;
   titulo: string;
   descripcion: string;
@@ -576,11 +639,22 @@ function BonusInput({
           <p className="mt-1 text-sm leading-6 text-slate-300">{descripcion}</p>
 
           <input
+            list={`jugadores-${titulo}`}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
             className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-300"
           />
+          <datalist id={`jugadores-${titulo}`}>
+            {jugadores.map((jugador) => (
+              <option
+                key={`${jugador.nombre_oficial}-${jugador.seleccion}`}
+                value={jugador.nombre_oficial}
+              >
+                {jugador.seleccion}
+              </option>
+            ))}
+          </datalist>
         </div>
       </div>
     </section>
