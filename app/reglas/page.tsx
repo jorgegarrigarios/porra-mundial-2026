@@ -1,5 +1,6 @@
 import {
   CalendarClock,
+  Coins,
   CheckCircle2,
   Crown,
   Flame,
@@ -80,6 +81,110 @@ export default function ReglasPage() {
               individuales.
             </p>
           </article>
+        </section>
+
+        <section className="quickGuide">
+          <div className="quickGuideText">
+            <span>Resumen rápido</span>
+            <h2>Cómo se gana la porra</h2>
+            <p>
+              Sumas puntos por acertar partidos, clasificados de grupo y bonus.
+              El ranking de tu liga se actualiza con todos esos puntos. Gana quien
+              termine primero cuando acabe el Mundial.
+            </p>
+          </div>
+
+          <div className="quickSteps">
+            <div>
+              <strong>1</strong>
+              <span>Haz tus pronósticos</span>
+            </div>
+
+            <div>
+              <strong>2</strong>
+              <span>Suma puntos durante el Mundial</span>
+            </div>
+
+            <div>
+              <strong>3</strong>
+              <span>Compite por el podio de tu liga</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="mainCard prizeCard">
+          <div className="sectionHeader">
+            <Coins size={24} />
+
+            <div>
+              <h2>Inscripción, bote y premios</h2>
+
+              <p>
+                Cada liga puede tener su propio importe de inscripción. El importe
+                lo configura el administrador de esa liga.
+              </p>
+            </div>
+          </div>
+
+          <div className="prizeExplainGrid">
+            <article className="prizeExplainItem">
+              <span>1</span>
+              <h3>Inscripción por liga</h3>
+              <p>
+                Cada participante aporta el importe definido para su liga. El
+                importe puede ser distinto en cada liga.
+              </p>
+            </article>
+
+            <article className="prizeExplainItem">
+              <span>2</span>
+              <h3>Mantenimiento</h3>
+              <p>
+                De cada inscripción, 1 € se destina al mantenimiento y mejora de
+                la plataforma: servidores, dominio, API y soporte técnico.
+              </p>
+            </article>
+
+            <article className="prizeExplainItem">
+              <span>3</span>
+              <h3>Bote automático</h3>
+              <p>
+                El bote se calcula automáticamente con los participantes de la
+                liga y el importe configurado por su administrador.
+              </p>
+            </article>
+          </div>
+
+          <div className="prizePodium">
+            <article className="prizePosition first">
+              <Crown size={30} />
+              <span>1º puesto</span>
+              <strong>Bote restante</strong>
+              <p>El campeón se lleva la gloria y la mayor parte del premio.</p>
+            </article>
+
+            <article className="prizePosition second">
+              <Medal size={28} />
+              <span>2º puesto</span>
+              <strong>Doble inscripción</strong>
+              <p>Premio para quien pelea arriba hasta el final.</p>
+            </article>
+
+            <article className="prizePosition third">
+              <Medal size={28} />
+              <span>3º puesto</span>
+              <strong>Recupera inscripción</strong>
+              <p>Reconocimiento para completar el podio.</p>
+            </article>
+          </div>
+
+          <div className="prizeNote">
+            <strong>Importante:</strong>
+            <span>
+              Los importes concretos y el bote de una liga solo deben verse dentro
+              de esa liga privada.
+            </span>
+          </div>
         </section>
 
         <section className="mainCard">
@@ -595,6 +700,80 @@ export default function ReglasPage() {
           font-size: 14px;
         }
 
+
+        .quickGuide {
+          display: grid;
+          grid-template-columns: 1.1fr 1fr;
+          gap: 18px;
+          align-items: center;
+          background:
+            linear-gradient(135deg, rgba(37,99,235,0.18), rgba(250,204,21,0.08)),
+            rgba(15,23,42,0.74);
+          border: 1px solid rgba(147,197,253,0.16);
+          border-radius: 32px;
+          padding: 26px;
+          margin-bottom: 24px;
+          box-shadow: 0 24px 80px rgba(0,0,0,0.18);
+        }
+
+        .quickGuideText span {
+          display: inline-flex;
+          margin-bottom: 8px;
+          color: #bfdbfe;
+          font-size: 12px;
+          font-weight: 950;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .quickGuideText h2 {
+          margin: 0;
+          font-size: 31px;
+          line-height: 1.08;
+          font-weight: 950;
+          letter-spacing: -0.8px;
+        }
+
+        .quickGuideText p {
+          margin: 10px 0 0;
+          color: #cbd5e1;
+          line-height: 1.65;
+        }
+
+        .quickSteps {
+          display: grid;
+          gap: 10px;
+        }
+
+        .quickSteps div {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          border-radius: 20px;
+          padding: 14px;
+          background: rgba(2,6,23,0.36);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .quickSteps strong {
+          width: 34px;
+          height: 34px;
+          border-radius: 13px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(250,204,21,0.18);
+          color: #fef3c7;
+          font-weight: 950;
+          flex-shrink: 0;
+        }
+
+        .quickSteps span {
+          color: #e2e8f0;
+          font-weight: 900;
+          line-height: 1.35;
+        }
+
         .mainCard,
         .whyCard,
         .comebackCard {
@@ -915,6 +1094,136 @@ export default function ReglasPage() {
           color: #fef3c7;
         }
 
+
+        .prizeCard {
+          background:
+            linear-gradient(135deg, rgba(250,204,21,0.11), rgba(37,99,235,0.10)),
+            rgba(15,23,42,0.78);
+          border-color: rgba(250,204,21,0.18);
+        }
+
+        .prizeExplainGrid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .prizeExplainItem {
+          border-radius: 24px;
+          padding: 20px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .prizeExplainItem span {
+          width: 42px;
+          height: 42px;
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(250,204,21,0.16);
+          color: #fef3c7;
+          font-size: 20px;
+          font-weight: 950;
+          margin-bottom: 14px;
+        }
+
+        .prizeExplainItem h3 {
+          margin: 0 0 8px;
+          font-size: 20px;
+          font-weight: 950;
+        }
+
+        .prizeExplainItem p {
+          margin: 0;
+          color: #cbd5e1;
+          line-height: 1.6;
+        }
+
+        .prizePodium {
+          display: grid;
+          grid-template-columns: 1.25fr 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        .prizePosition {
+          border-radius: 26px;
+          padding: 22px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .prizePosition.first {
+          background: rgba(250,204,21,0.11);
+          border-color: rgba(250,204,21,0.32);
+        }
+
+        .prizePosition.second {
+          background: rgba(148,163,184,0.10);
+          border-color: rgba(203,213,225,0.22);
+        }
+
+        .prizePosition.third {
+          background: rgba(249,115,22,0.10);
+          border-color: rgba(251,146,60,0.22);
+        }
+
+        .prizePosition svg {
+          color: #facc15;
+          margin-bottom: 12px;
+        }
+
+        .prizePosition.second svg {
+          color: #e5e7eb;
+        }
+
+        .prizePosition.third svg {
+          color: #fb923c;
+        }
+
+        .prizePosition span {
+          display: block;
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          margin-bottom: 6px;
+        }
+
+        .prizePosition strong {
+          display: block;
+          font-size: 25px;
+          font-weight: 950;
+          color: #fef3c7;
+          margin-bottom: 8px;
+        }
+
+        .prizePosition p {
+          margin: 0;
+          color: #cbd5e1;
+          line-height: 1.55;
+        }
+
+        .prizeNote {
+          display: flex;
+          gap: 8px;
+          border-radius: 20px;
+          padding: 16px 18px;
+          background: rgba(2,6,23,0.38);
+          border: 1px solid rgba(255,255,255,0.08);
+          color: #dbeafe;
+          line-height: 1.55;
+        }
+
+        .prizeNote strong {
+          color: #fef3c7;
+          white-space: nowrap;
+        }
+
         .bonusItem ul,
         .specialItem ul {
           margin: 14px 0 0;
@@ -1062,12 +1371,15 @@ export default function ReglasPage() {
           .summaryGrid,
           .oneXTwoGrid,
           .groupScoring,
+          .prizeExplainGrid,
+          .prizePodium,
           .whyGrid {
             grid-template-columns: 1fr;
           }
         }
 
         @media (max-width: 960px) {
+          .quickGuide,
           .rulesGrid,
           .bonusGrid,
           .specialGrid {
@@ -1098,6 +1410,21 @@ export default function ReglasPage() {
 
           .hero p {
             font-size: 15px;
+          }
+
+
+          .quickGuide {
+            grid-template-columns: 1fr;
+            padding: 20px;
+            border-radius: 26px;
+          }
+
+          .quickGuideText h2 {
+            font-size: 25px;
+          }
+
+          .prizeNote {
+            flex-direction: column;
           }
 
           .mainCard,

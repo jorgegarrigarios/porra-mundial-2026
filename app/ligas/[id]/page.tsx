@@ -33,6 +33,8 @@ type Liga = {
   id: number;
   nombre: string;
   codigo: string;
+  creador_id: number | null;
+  inscripcion_eur: number | null;
 };
 
 type UsuarioActual = {
@@ -120,6 +122,25 @@ function sumarPuntosPorParticipante<T extends { participante_id: number }>(
     .reduce((total, fila) => total + (obtenerPuntos(fila) ?? 0), 0);
 }
 
+function formatearEuros(valor: number) {
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: Number.isInteger(valor) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(valor);
+}
+
+function normalizarImporte(valor: string) {
+  const numero = Number(valor.replace(",", "."));
+
+  if (!Number.isFinite(numero) || numero < 0) {
+    return 0;
+  }
+
+  return Math.round(numero * 100) / 100;
+}
+
 export default function LigaDetallePage({ params }: Props) {
   const resolvedParams = use(params);
 
@@ -131,6 +152,9 @@ export default function LigaDetallePage({ params }: Props) {
   const [sinAcceso, setSinAcceso] = useState(false);
   const [error, setError] = useState("");
   const [codigoCopiado, setCodigoCopiado] = useState(false);
+  const [inscripcionInput, setInscripcionInput] = useState("0");
+  const [guardandoInscripcion, setGuardandoInscripcion] = useState(false);
+  const [mensajeInscripcion, setMensajeInscripcion] = useState("");
 
   useEffect(() => {
     const id = Number(resolvedParams.id);
@@ -186,6 +210,16 @@ export default function LigaDetallePage({ params }: Props) {
         },
         () => cargarLiga(ligaId, true)
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "ligas",
+          filter: `id=eq.${ligaId}`,
+        },
+        () => cargarLiga(ligaId, true)
+      )
       .subscribe();
 
     return () => {
@@ -236,7 +270,11 @@ export default function LigaDetallePage({ params }: Props) {
       }
 
       const { data: ligaData, error: ligaError } = await conTimeout(
-        supabase.from("ligas").select("id, nombre, codigo").eq("id", id).single(),
+        supabase
+          .from("ligas")
+          .select("id, nombre, codigo, creador_id, inscripcion_eur")
+          .eq("id", id)
+          .single(),
         10000,
         "No se ha podido cargar la liga."
       );
@@ -247,7 +285,9 @@ export default function LigaDetallePage({ params }: Props) {
         return;
       }
 
-      setLiga(ligaData as Liga);
+      const ligaNormalizada = ligaData as Liga;
+      setLiga(ligaNormalizada);
+      setInscripcionInput(String(ligaNormalizada.inscripcion_eur ?? 0));
 
       const { data: miembrosData, error: miembrosError } = await conTimeout(
         supabase
@@ -424,6 +464,50 @@ export default function LigaDetallePage({ params }: Props) {
     }
   }
 
+  async function guardarInscripcion() {
+    if (!liga || !usuarioActual || liga.creador_id !== usuarioActual.id) return;
+
+    const importe = normalizarImporte(inscripcionInput);
+
+    setGuardandoInscripcion(true);
+    setMensajeInscripcion("");
+    setError("");
+
+    try {
+      const { error: updateError } = await conTimeout(
+        supabase
+          .from("ligas")
+          .update({ inscripcion_eur: importe })
+          .eq("id", liga.id)
+          .eq("creador_id", usuarioActual.id),
+        10000,
+        "No se ha podido guardar la inscripción."
+      );
+
+      if (updateError) {
+        setError("No se ha podido guardar la inscripción.");
+        return;
+      }
+
+      setLiga({ ...liga, inscripcion_eur: importe });
+      setInscripcionInput(String(importe));
+      setMensajeInscripcion("Inscripción actualizada");
+
+      setTimeout(() => {
+        setMensajeInscripcion("");
+      }, 2200);
+    } catch (err) {
+      console.error("Error guardando inscripción:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se ha podido guardar la inscripción."
+      );
+    } finally {
+      setGuardandoInscripcion(false);
+    }
+  }
+
   const top3 = ranking.slice(0, 3);
   const lider = ranking[0] ?? null;
   const usuarioEnRanking = ranking.find(
@@ -436,6 +520,19 @@ export default function LigaDetallePage({ params }: Props) {
     lider && usuarioEnRanking ? lider.puntos - usuarioEnRanking.puntos : 0;
   const estaPrimero = posicionUsuario === 1;
   const miembrosTotales = ranking.length;
+  const esAdminLiga = Boolean(
+    liga && usuarioActual && liga.creador_id === usuarioActual.id
+  );
+  const inscripcionLiga = Number(liga?.inscripcion_eur ?? 0);
+  const mantenimientoPlataforma = miembrosTotales * 1;
+  const recaudadoTotal = miembrosTotales * inscripcionLiga;
+  const botePremios = Math.max(recaudadoTotal - mantenimientoPlataforma, 0);
+  const premioSegundo = inscripcionLiga > 0 ? inscripcionLiga * 2 : 0;
+  const premioTercero = inscripcionLiga > 0 ? inscripcionLiga : 0;
+  const premioPrimero = Math.max(
+    botePremios - premioSegundo - premioTercero,
+    0
+  );
 
   if (cargando) {
     return (
@@ -634,6 +731,115 @@ export default function LigaDetallePage({ params }: Props) {
             </div>
           </section>
         )}
+
+        <section className="prizePanel">
+          <div className="prizeHeader">
+            <div>
+              <p className="sectionEyebrow">Bote privado de la liga</p>
+              <h2>Bote y premios</h2>
+              <p>
+                El cálculo se actualiza automáticamente según los miembros de
+                esta liga. 1 € por participante se destina al mantenimiento de
+                servidores, API y plataforma.
+              </p>
+            </div>
+
+            <div className="prizeTotal">
+              <span>Bote premios</span>
+              <strong>{formatearEuros(botePremios)}</strong>
+            </div>
+          </div>
+
+          <div className="prizeGrid">
+            <article className="prizeCard champion">
+              <div className="prizeIcon">
+                <Crown size={28} />
+              </div>
+              <p>1º puesto</p>
+              <strong>{formatearEuros(premioPrimero)}</strong>
+              <span>El campeón se lleva la gloria</span>
+            </article>
+
+            <article className="prizeCard">
+              <div className="prizeIcon">
+                <Medal size={28} />
+              </div>
+              <p>2º puesto</p>
+              <strong>{formatearEuros(premioSegundo)}</strong>
+              <span>Doble de la inscripción</span>
+            </article>
+
+            <article className="prizeCard">
+              <div className="prizeIcon">
+                <Trophy size={28} />
+              </div>
+              <p>3º puesto</p>
+              <strong>{formatearEuros(premioTercero)}</strong>
+              <span>Recupera la inscripción</span>
+            </article>
+          </div>
+
+          <div className="moneySummary">
+            <div>
+              <span>Participantes</span>
+              <strong>{miembrosTotales}</strong>
+            </div>
+
+            <div>
+              <span>Inscripción</span>
+              <strong>{formatearEuros(inscripcionLiga)}</strong>
+            </div>
+
+            <div>
+              <span>Recaudado</span>
+              <strong>{formatearEuros(recaudadoTotal)}</strong>
+            </div>
+
+            <div>
+              <span>Mantenimiento</span>
+              <strong>{formatearEuros(mantenimientoPlataforma)}</strong>
+            </div>
+          </div>
+
+          {esAdminLiga ? (
+            <div className="adminPrizeBox">
+              <div>
+                <strong>Configurar inscripción</strong>
+                <p>Solo el administrador de la liga puede modificar este importe.</p>
+              </div>
+
+              <div className="adminControls">
+                <label htmlFor="inscripcionLiga">Importe por usuario</label>
+                <div className="inputRow">
+                  <input
+                    id="inscripcionLiga"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={inscripcionInput}
+                    onChange={(event) => setInscripcionInput(event.target.value)}
+                    disabled={guardandoInscripcion}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={guardarInscripcion}
+                    disabled={guardandoInscripcion}
+                  >
+                    {guardandoInscripcion ? "Guardando..." : "Guardar"}
+                  </button>
+                </div>
+
+                {mensajeInscripcion && <small>{mensajeInscripcion}</small>}
+              </div>
+            </div>
+          ) : (
+            <div className="viewerPrizeNote">
+              <Shield size={18} />
+              Solo el administrador de la liga puede modificar la inscripción.
+            </div>
+          )}
+        </section>
 
         <section className="contextActions">
           <Link href="/mis-pronosticos" className="contextAction primary">
@@ -1053,6 +1259,242 @@ function Styles() {
         font-weight: 950;
       }
 
+      .prizePanel {
+        position: relative;
+        overflow: hidden;
+        margin-top: 20px;
+        border-radius: 32px;
+        padding: 26px;
+        background:
+          radial-gradient(circle at top right, rgba(250,204,21,0.16), transparent 34%),
+          linear-gradient(145deg, rgba(15,23,42,0.95), rgba(15,23,42,0.74));
+        border: 1px solid rgba(250,204,21,0.18);
+        box-shadow: 0 24px 80px rgba(0,0,0,0.24);
+      }
+
+      .prizeHeader {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: start;
+        margin-bottom: 18px;
+      }
+
+      .prizeHeader h2 {
+        margin: 0;
+        font-size: clamp(31px, 4vw, 44px);
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.045em;
+      }
+
+      .prizeHeader p {
+        margin: 10px 0 0;
+        color: #cbd5e1;
+        line-height: 1.55;
+        font-weight: 750;
+        max-width: 720px;
+      }
+
+      .prizeTotal {
+        min-width: 210px;
+        border-radius: 26px;
+        padding: 18px;
+        text-align: right;
+        background: rgba(250,204,21,0.12);
+        border: 1px solid rgba(250,204,21,0.22);
+      }
+
+      .prizeTotal span,
+      .moneySummary span {
+        display: block;
+        color: #fde68a;
+        font-size: 12px;
+        font-weight: 950;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .prizeTotal strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 34px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.055em;
+      }
+
+      .prizeGrid {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr 1fr;
+        gap: 14px;
+      }
+
+      .prizeCard {
+        border-radius: 26px;
+        padding: 20px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+
+      .prizeCard.champion {
+        background: linear-gradient(145deg, rgba(250,204,21,0.18), rgba(255,255,255,0.06));
+        border-color: rgba(250,204,21,0.30);
+      }
+
+      .prizeIcon {
+        width: 50px;
+        height: 50px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(37,99,235,0.16);
+        color: #facc15;
+        margin-bottom: 14px;
+      }
+
+      .prizeCard p {
+        margin: 0 0 8px;
+        color: #94a3b8;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 12px;
+      }
+
+      .prizeCard strong {
+        display: block;
+        font-size: 36px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -0.055em;
+      }
+
+      .prizeCard span {
+        display: block;
+        margin-top: 8px;
+        color: #cbd5e1;
+        font-weight: 850;
+        line-height: 1.4;
+      }
+
+      .moneySummary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .moneySummary div {
+        border-radius: 22px;
+        padding: 16px;
+        background: rgba(2,6,23,0.34);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+
+      .moneySummary strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 24px;
+        font-weight: 950;
+        letter-spacing: -0.035em;
+      }
+
+      .adminPrizeBox,
+      .viewerPrizeNote {
+        margin-top: 14px;
+        border-radius: 24px;
+        background: rgba(37,99,235,0.12);
+        border: 1px solid rgba(96,165,250,0.24);
+      }
+
+      .adminPrizeBox {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        align-items: center;
+        padding: 18px;
+      }
+
+      .adminPrizeBox strong {
+        display: block;
+        font-size: 17px;
+        font-weight: 950;
+      }
+
+      .adminPrizeBox p {
+        margin: 5px 0 0;
+        color: #cbd5e1;
+        font-weight: 750;
+      }
+
+      .adminControls label {
+        display: block;
+        margin-bottom: 7px;
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 950;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .inputRow {
+        display: flex;
+        gap: 8px;
+      }
+
+      .inputRow input {
+        width: 130px;
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(2,6,23,0.62);
+        color: white;
+        padding: 13px 14px;
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 900;
+        outline: none;
+      }
+
+      .inputRow input:focus {
+        border-color: rgba(96,165,250,0.52);
+        box-shadow: 0 0 0 4px rgba(37,99,235,0.18);
+      }
+
+      .inputRow button {
+        border: none;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        padding: 13px 16px;
+        font-family: inherit;
+        font-weight: 950;
+        cursor: pointer;
+      }
+
+      .inputRow button:disabled,
+      .inputRow input:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+
+      .adminControls small {
+        display: block;
+        margin-top: 7px;
+        color: #bbf7d0;
+        font-weight: 850;
+      }
+
+      .viewerPrizeNote {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 16px;
+        color: #bfdbfe;
+        font-weight: 850;
+      }
+
       .contextActions {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1423,8 +1865,23 @@ function Styles() {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .podiumGrid {
+        .podiumGrid,
+        .prizeGrid {
           grid-template-columns: 1fr;
+        }
+
+        .prizeHeader,
+        .adminPrizeBox {
+          grid-template-columns: 1fr;
+        }
+
+        .prizeTotal {
+          min-width: 0;
+          text-align: left;
+        }
+
+        .moneySummary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
 
@@ -1462,7 +1919,8 @@ function Styles() {
 
         .personalPanel,
         .contextActions,
-        .pointsBreakdown {
+        .pointsBreakdown,
+        .moneySummary {
           grid-template-columns: 1fr;
         }
 
@@ -1489,6 +1947,19 @@ function Styles() {
         .errorBox {
           flex-direction: column;
           align-items: stretch;
+        }
+
+        .prizePanel {
+          border-radius: 28px;
+          padding: 22px;
+        }
+
+        .inputRow {
+          flex-direction: column;
+        }
+
+        .inputRow input {
+          width: 100%;
         }
       }
     `}</style>
