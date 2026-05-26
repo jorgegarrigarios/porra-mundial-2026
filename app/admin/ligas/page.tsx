@@ -20,6 +20,7 @@ type Liga = {
   codigo: string;
   estado: string;
   created_at: string;
+  creador_id: number | null;
 };
 
 export default function AdminLigasPage() {
@@ -72,18 +73,42 @@ export default function AdminLigasPage() {
     setLoading(false);
   }
 
-  async function actualizarEstado(
-    ligaId: number,
-    estado: string
-  ) {
-    await supabase
+  async function actualizarEstado(liga: Liga, estado: string) {
+    const { error: updateError } = await supabase
       .from("ligas")
       .update({
         estado,
       })
-      .eq("id", ligaId);
+      .eq("id", liga.id);
 
-    cargarLigas();
+    if (updateError) {
+      console.error("Error actualizando liga:", updateError);
+      await cargarLigas();
+      return;
+    }
+
+    if (estado === "activa" && liga.creador_id) {
+      const { error: participanteError } = await supabase
+        .from("liga_participantes")
+        .upsert(
+          {
+            liga_id: liga.id,
+            participante_id: liga.creador_id,
+          },
+          {
+            onConflict: "liga_id,participante_id",
+          }
+        );
+
+      if (participanteError) {
+        console.error(
+          "Liga aprobada, pero no se pudo añadir el creador como participante:",
+          participanteError
+        );
+      }
+    }
+
+    await cargarLigas();
   }
 
   if (loading) {
@@ -170,7 +195,7 @@ export default function AdminLigasPage() {
                     className="approveButton"
                     onClick={() =>
                       actualizarEstado(
-                        liga.id,
+                        liga,
                         "activa"
                       )
                     }
@@ -183,7 +208,7 @@ export default function AdminLigasPage() {
                     className="rejectButton"
                     onClick={() =>
                       actualizarEstado(
-                        liga.id,
+                        liga,
                         "rechazada"
                       )
                     }

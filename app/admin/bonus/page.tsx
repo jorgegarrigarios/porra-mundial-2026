@@ -10,7 +10,7 @@ import {
   Goal,
   Loader2,
   Medal,
-  RefreshCw,
+  Download,
   Save,
   Search,
   Shield,
@@ -26,7 +26,17 @@ import { calcularPuntosBonus } from "@/lib/puntos";
 
 type SeleccionImportable = {
   nombre: string;
+  teamId: number | null;
+  fuente: "api-mundial" | "partidos";
+};
+
+type EquipoMundialApi = {
+  nombre: string;
+  nombreApi: string;
   teamId: number;
+  code: string | null;
+  country: string | null;
+  logo: string | null;
 };
 
 type JugadorApiFootball = {
@@ -86,16 +96,6 @@ type ResultadosOficialesBonus = {
   seleccion_decepcion: string;
 };
 
-const SELECCIONES_IMPORTABLES: SeleccionImportable[] = [
-  { nombre: "España", teamId: 9 },
-  { nombre: "Brasil", teamId: 6 },
-  { nombre: "Argentina", teamId: 26 },
-  { nombre: "Francia", teamId: 2 },
-  { nombre: "Alemania", teamId: 25 },
-  { nombre: "Inglaterra", teamId: 10 },
-  { nombre: "Portugal", teamId: 27 },
-];
-
 const RESULTADOS_INICIALES: ResultadosOficialesBonus = {
   campeon: "",
   subcampeon: "",
@@ -136,6 +136,14 @@ function formatearJugador(
   };
 }
 
+function normalizarTexto(valor: string | null | undefined) {
+  return (valor ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizarEquipo(equipo: string | null) {
   const limpio = equipo?.trim();
 
@@ -159,20 +167,62 @@ function limpiarValor(valor: string) {
   return limpio.length > 0 ? limpio : null;
 }
 
+function construirSeleccionesDesdePartidos(partidos: PartidoRow[]) {
+  const mapa = new Map<string, string>();
+
+  partidos
+    .flatMap((partido) => [
+      normalizarEquipo(partido.local),
+      normalizarEquipo(partido.visitante),
+    ])
+    .filter((equipo): equipo is string => Boolean(equipo))
+    .forEach((equipo) => {
+      const clave = normalizarTexto(equipo);
+
+      if (!clave || clave === "italia") return;
+
+      if (!mapa.has(clave)) {
+        mapa.set(clave, equipo);
+      }
+    });
+
+  return Array.from(mapa.values())
+    .sort((a, b) => a.localeCompare(b, "es"))
+    .map((nombre) => ({
+      nombre,
+      teamId: null,
+      fuente: "partidos" as const,
+    }));
+}
+
+function obtenerTextoFuente(seleccion: SeleccionImportable) {
+  if (seleccion.fuente === "api-mundial") {
+    return "Football API";
+  }
+
+  return "Lista de partidos";
+}
+
 export default function AdminBonusPage() {
   const router = useRouter();
 
   const [cargandoPermisos, setCargandoPermisos] = useState(true);
   const [cargandoConteos, setCargandoConteos] = useState(false);
+  const [cargandoSelecciones, setCargandoSelecciones] = useState(false);
   const [autorizado, setAutorizado] = useState(false);
   const [importandoTeamId, setImportandoTeamId] = useState<number | null>(null);
+  const [importandoNombre, setImportandoNombre] = useState<string | null>(null);
   const [importandoTodo, setImportandoTodo] = useState(false);
   const [guardandoResultados, setGuardandoResultados] = useState(false);
   const [resultado, setResultado] = useState("");
   const [error, setError] = useState("");
+  const [avisoSelecciones, setAvisoSelecciones] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [conteos, setConteos] = useState<Record<string, number>>({});
   const [selecciones, setSelecciones] = useState<string[]>([]);
+  const [seleccionesImportables, setSeleccionesImportables] = useState<
+    SeleccionImportable[]
+  >([]);
   const [jugadores, setJugadores] = useState<JugadorOption[]>([]);
   const [resultadosOficiales, setResultadosOficiales] =
     useState<ResultadosOficialesBonus>(RESULTADOS_INICIALES);
@@ -180,12 +230,12 @@ export default function AdminBonusPage() {
   const seleccionesFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
 
-    if (!q) return SELECCIONES_IMPORTABLES;
+    if (!q) return seleccionesImportables;
 
-    return SELECCIONES_IMPORTABLES.filter((seleccion) =>
+    return seleccionesImportables.filter((seleccion) =>
       seleccion.nombre.toLowerCase().includes(q)
     );
-  }, [busqueda]);
+  }, [busqueda, seleccionesImportables]);
 
   useEffect(() => {
     let activo = true;
@@ -211,7 +261,12 @@ export default function AdminBonusPage() {
 
       setAutorizado(true);
       setCargandoPermisos(false);
-      await Promise.all([cargarConteos(), cargarDatosResultados()]);
+
+      await Promise.all([
+        cargarConteos(),
+        cargarDatosResultados(),
+        cargarSeleccionesImportables(),
+      ]);
     }
 
     validarAdmin();
@@ -220,6 +275,64 @@ export default function AdminBonusPage() {
       activo = false;
     };
   }, [router]);
+
+  async function cargarSeleccionesImportables() {
+    setCargandoSelecciones(true);
+    setAvisoSelecciones("");
+
+    try {
+      const res = await fetch("/api/football/equipos-mundial");
+      const data = await res.json();
+
+      if (
+        res.ok &&
+        data.ok &&
+        Array.isArray(data.equipos) &&
+        data.equipos.length > 0
+      ) {
+        const equiposApi = (data.equipos as EquipoMundialApi[])
+          .filter((equipo) => normalizarTexto(equipo.nombre) !== "italia")
+          .map((equipo) => ({
+            nombre: equipo.nombre,
+            teamId: equipo.teamId,
+            fuente: "api-mundial" as const,
+          }));
+
+        setSeleccionesImportables(equiposApi);
+        setAvisoSelecciones(
+          `Selecciones cargadas desde Football API: ${equiposApi.length}.`
+        );
+        return;
+      }
+
+      const { data: partidosData, error: partidosError } = await supabase
+        .from("partidos")
+        .select("local, visitante, fase");
+
+      if (partidosError) {
+        throw new Error(partidosError.message);
+      }
+
+      const fallback = construirSeleccionesDesdePartidos(
+        (partidosData || []) as PartidoRow[]
+      );
+
+      setSeleccionesImportables(fallback);
+      setAvisoSelecciones(
+        `Football API no ha devuelto equipos del Mundial 2026 con el plan actual. Se usa la lista de selecciones cargadas en partidos (${fallback.length}) y se resolverá el teamId al importar cada plantilla.`
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "No se pudieron cargar selecciones importables.";
+
+      setError(message);
+      setSeleccionesImportables([]);
+    } finally {
+      setCargandoSelecciones(false);
+    }
+  }
 
   async function cargarConteos() {
     setCargandoConteos(true);
@@ -280,16 +393,9 @@ export default function AdminBonusPage() {
 
     setJugadores((jugadoresData || []) as JugadorOption[]);
 
-    const equipos = Array.from(
-      new Set(
-        ((partidosData || []) as PartidoRow[])
-          .flatMap((partido) => [
-            normalizarEquipo(partido.local),
-            normalizarEquipo(partido.visitante),
-          ])
-          .filter((equipo): equipo is string => Boolean(equipo))
-      )
-    ).sort((a, b) => a.localeCompare(b, "es"));
+    const equipos = construirSeleccionesDesdePartidos(
+      (partidosData || []) as PartidoRow[]
+    ).map((seleccion) => seleccion.nombre);
 
     setSelecciones(equipos);
 
@@ -320,18 +426,34 @@ export default function AdminBonusPage() {
     });
   }
 
+  async function consultarPlantilla(seleccion: SeleccionImportable) {
+    if (seleccion.teamId) {
+      return fetch(`/api/football/plantilla?teamId=${seleccion.teamId}`);
+    }
+
+    return fetch(
+      `/api/football/plantilla?nombre=${encodeURIComponent(seleccion.nombre)}`
+    );
+  }
+
   async function importarSeleccion(seleccion: SeleccionImportable) {
     setResultado("");
     setError("");
     setImportandoTeamId(seleccion.teamId);
+    setImportandoNombre(seleccion.nombre);
 
     try {
-      const res = await fetch(`/api/football/plantilla?teamId=${seleccion.teamId}`);
-
+      const res = await consultarPlantilla(seleccion);
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
         throw new Error(data.error ?? "No se pudo consultar la plantilla.");
+      }
+
+      const teamIdReal = Number(data.teamId);
+
+      if (!Number.isFinite(teamIdReal)) {
+        throw new Error(`No se pudo resolver el teamId de ${seleccion.nombre}.`);
       }
 
       const jugadoresApi = Array.isArray(data.jugadores)
@@ -339,9 +461,7 @@ export default function AdminBonusPage() {
         : [];
 
       const jugadoresFormateadosSinDeduplicar = jugadoresApi
-        .map((jugador) =>
-          formatearJugador(jugador, seleccion.nombre, seleccion.teamId)
-        )
+        .map((jugador) => formatearJugador(jugador, seleccion.nombre, teamIdReal))
         .filter((jugador): jugador is JugadorSupabase => jugador !== null);
 
       const jugadoresFormateados = Array.from(
@@ -384,6 +504,7 @@ export default function AdminBonusPage() {
       setError(message);
     } finally {
       setImportandoTeamId(null);
+      setImportandoNombre(null);
     }
   }
 
@@ -396,18 +517,22 @@ export default function AdminBonusPage() {
     const errores: string[] = [];
 
     try {
-      for (const seleccion of SELECCIONES_IMPORTABLES) {
+      for (const seleccion of seleccionesImportables) {
         setImportandoTeamId(seleccion.teamId);
+        setImportandoNombre(seleccion.nombre);
 
         try {
-          const res = await fetch(
-            `/api/football/plantilla?teamId=${seleccion.teamId}`
-          );
-
+          const res = await consultarPlantilla(seleccion);
           const data = await res.json();
 
           if (!res.ok || !data.ok) {
             throw new Error(data.error ?? "No se pudo consultar la plantilla.");
+          }
+
+          const teamIdReal = Number(data.teamId);
+
+          if (!Number.isFinite(teamIdReal)) {
+            throw new Error(`No se pudo resolver el teamId de ${seleccion.nombre}.`);
           }
 
           const jugadoresApi = Array.isArray(data.jugadores)
@@ -415,9 +540,7 @@ export default function AdminBonusPage() {
             : [];
 
           const jugadoresFormateadosSinDeduplicar = jugadoresApi
-            .map((jugador) =>
-              formatearJugador(jugador, seleccion.nombre, seleccion.teamId)
-            )
+            .map((jugador) => formatearJugador(jugador, seleccion.nombre, teamIdReal))
             .filter((jugador): jugador is JugadorSupabase => jugador !== null);
 
           const jugadoresFormateados = Array.from(
@@ -462,6 +585,7 @@ export default function AdminBonusPage() {
       setResultado(`Proceso terminado. Jugadores procesados: ${total}.`);
     } finally {
       setImportandoTeamId(null);
+      setImportandoNombre(null);
       setImportandoTodo(false);
     }
   }
@@ -609,6 +733,9 @@ export default function AdminBonusPage() {
     return null;
   }
 
+  const hayImportacionActiva =
+    importandoTodo || importandoTeamId !== null || importandoNombre !== null;
+
   return (
     <main className="page">
       <div className="container">
@@ -621,33 +748,46 @@ export default function AdminBonusPage() {
           <div>
             <h1>Bonus oficiales</h1>
             <p className="subtitle">
-              Gestiona el catálogo oficial de jugadores y registra los resultados
-              reales de bonus para que después se puedan recalcular puntos.
+              Gestiona el catálogo oficial de jugadores y registra resultados
+              reales de bonus. Football API se usa solo como sincronización de
+              administración.
             </p>
           </div>
 
           <button
             className="primaryButton"
             onClick={importarTodas}
-            disabled={importandoTodo || importandoTeamId !== null}
+            disabled={
+              hayImportacionActiva ||
+              cargandoSelecciones ||
+              seleccionesImportables.length === 0
+            }
           >
             {importandoTodo ? (
               <Loader2 className="spin" size={18} />
             ) : (
               <Database size={18} />
             )}
-            Importar selecciones base
+            Importar todas
           </button>
         </div>
 
         <section className="notice">
           <Users size={20} />
           <div>
-            <strong>Estado:</strong> los jugadores activos se usan en la página
-            de bonus del usuario con validación. Italia queda fuera de la lista
-            base porque no participa.
+            <strong>Estado:</strong> si Football API no devuelve equipos del
+            Mundial 2026 por el plan actual, se usa como fallback la lista de
+            selecciones ya cargadas en la tabla de partidos. Al importar, la app
+            resuelve el teamId por nombre y descarga la plantilla.
           </div>
         </section>
+
+        {avisoSelecciones && (
+          <section className="notice warning">
+            <AlertTriangle size={20} />
+            <div>{avisoSelecciones}</div>
+          </section>
+        )}
 
         <section className="officialPanel">
           <div className="panelHeader">
@@ -831,8 +971,8 @@ export default function AdminBonusPage() {
               </div>
               <h2>Jugadores por selección</h2>
               <p>
-                Importa o actualiza plantillas desde API-Football. Los usuarios
-                solo pueden guardar jugadores activos del catálogo.
+                Importa plantillas desde API-Football. Los usuarios solo pueden
+                guardar jugadores activos del catálogo.
               </p>
             </div>
           </div>
@@ -846,41 +986,58 @@ export default function AdminBonusPage() {
             />
           </div>
 
-          <section className="grid">
-            {seleccionesFiltradas.map((seleccion) => {
-              const cargando = importandoTeamId === seleccion.teamId;
-              const totalJugadores = conteos[seleccion.nombre] ?? 0;
+          {cargandoSelecciones ? (
+            <div className="loadingInline">
+              <Loader2 className="spin" size={18} />
+              Cargando selecciones importables...
+            </div>
+          ) : (
+            <section className="grid">
+              {seleccionesFiltradas.map((seleccion) => {
+                const cargando =
+                  importandoNombre === seleccion.nombre ||
+                  importandoTeamId === seleccion.teamId;
+                const totalJugadores = conteos[seleccion.nombre] ?? 0;
 
-              return (
-                <article className="card" key={seleccion.teamId}>
-                  <div>
-                    <h3>{seleccion.nombre}</h3>
-                    <p>Team ID: {seleccion.teamId}</p>
+                return (
+                  <article className="card" key={seleccion.nombre}>
+                    <div>
+                      <h3>{seleccion.nombre}</h3>
+                      <p>
+                        {seleccion.teamId
+                          ? `Team ID: ${seleccion.teamId}`
+                          : "Team ID: se resolverá por nombre"}
+                      </p>
 
-                    <div className="playerCount">
-                      <Star size={15} />
-                      {cargandoConteos
-                        ? "Contando jugadores..."
-                        : `${totalJugadores} jugadores activos`}
+                      <div className="sourceBadge">
+                        {obtenerTextoFuente(seleccion)}
+                      </div>
+
+                      <div className="playerCount">
+                        <Star size={15} />
+                        {cargandoConteos
+                          ? "Contando jugadores..."
+                          : `${totalJugadores} jugadores activos`}
+                      </div>
                     </div>
-                  </div>
 
-                  <button
-                    className="secondaryButton"
-                    onClick={() => importarSeleccion(seleccion)}
-                    disabled={importandoTodo || importandoTeamId !== null}
-                  >
-                    {cargando ? (
-                      <Loader2 className="spin" size={18} />
-                    ) : (
-                      <RefreshCw size={18} />
-                    )}
-                    Importar
-                  </button>
-                </article>
-              );
-            })}
-          </section>
+                    <button
+                      className="secondaryButton"
+                      onClick={() => importarSeleccion(seleccion)}
+                      disabled={hayImportacionActiva}
+                    >
+                      {cargando ? (
+                        <Loader2 className="spin" size={18} />
+                      ) : (
+                        <Download size={18} />
+                      )}
+                      Importar
+                    </button>
+                  </article>
+                );
+              })}
+            </section>
+          )}
         </section>
 
         {resultado && (
@@ -1006,6 +1163,12 @@ export default function AdminBonusPage() {
           padding: 16px;
           line-height: 1.55;
           font-weight: 650;
+        }
+
+        .notice.warning {
+          border-color: rgba(245, 158, 11, 0.28);
+          background: rgba(245, 158, 11, 0.12);
+          color: #fde68a;
         }
 
         .officialPanel,
@@ -1147,6 +1310,19 @@ export default function AdminBonusPage() {
           font-weight: 800;
         }
 
+        .sourceBadge {
+          margin-top: 10px;
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 11px;
+          font-weight: 900;
+          background: rgba(37, 99, 235, 0.14);
+          border: 1px solid rgba(37, 99, 235, 0.26);
+          color: #bfdbfe;
+        }
+
         .playerCount {
           margin-top: 10px;
           display: inline-flex;
@@ -1158,6 +1334,15 @@ export default function AdminBonusPage() {
           border-radius: 999px;
           padding: 7px 10px;
           font-size: 12px;
+          font-weight: 900;
+        }
+
+        .loadingInline {
+          margin-top: 18px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #cbd5e1;
           font-weight: 900;
         }
 
