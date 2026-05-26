@@ -332,6 +332,7 @@ export default function MisPronosticosPage() {
       weekday: "long",
       day: "numeric",
       month: "long",
+      timeZone: "Europe/Madrid",
     });
   }
 
@@ -344,6 +345,7 @@ export default function MisPronosticosPage() {
     return fecha.toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Europe/Madrid",
     });
   }
 

@@ -130,6 +130,7 @@ export default function PartidoDetallePage() {
       day: "numeric",
       month: "long",
       year: "numeric",
+      timeZone: "Europe/Madrid",
     });
   }
 
@@ -139,6 +140,7 @@ export default function PartidoDetallePage() {
     return new Date(fechaInicio).toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Europe/Madrid",
     });
   }
 
