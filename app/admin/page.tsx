@@ -18,6 +18,7 @@ export default function AdminHomePage() {
   const router = useRouter();
   const [cargando, setCargando] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
+  const [alertas, setAlertas] = useState({ ligas:0, resultados:0, pagos:0 });
 
   useEffect(() => {
     let activo = true;
@@ -48,6 +49,20 @@ export default function AdminHomePage() {
         router.replace("/");
         return;
       }
+
+      const ahora = new Date().toISOString();
+
+      const [ligasPend, partidosPend, pagosPend] = await Promise.all([
+        supabase.from("ligas").select("*",{count:"exact", head:true}).eq("estado","pendiente"),
+        supabase.from("partidos").select("*",{count:"exact", head:true}).lte("fecha_inicio", ahora).is("resultado_local", null),
+        supabase.from("liga_pagos").select("*",{count:"exact", head:true}).eq("pagado", false),
+      ]);
+
+      setAlertas({
+        ligas: ligasPend.count ?? 0,
+        resultados: partidosPend.count ?? 0,
+        pagos: pagosPend.count ?? 0,
+      });
 
       setAutorizado(true);
       setCargando(false);
@@ -148,6 +163,27 @@ export default function AdminHomePage() {
           </div>
         </div>
 
+        <div className="alertPanel">
+          <h2>Alertas Admin</h2>
+
+          <div className="alertGrid">
+            <div className="alertItem">
+              <strong>{alertas.ligas}</strong>
+              <span>Ligas pendientes</span>
+            </div>
+
+            <div className="alertItem">
+              <strong>{alertas.resultados}</strong>
+              <span>Resultados pendientes</span>
+            </div>
+
+            <div className="alertItem">
+              <strong>{alertas.pagos}</strong>
+              <span>Pagos pendientes</span>
+            </div>
+          </div>
+        </div>
+
         <div className="grid">
           {cards.map((card) => {
             const Icon = card.icon;
@@ -212,7 +248,48 @@ export default function AdminHomePage() {
           font-weight:700;
         }
 
-        .grid{
+        
+        .alertPanel{
+          margin-bottom:26px;
+          background:linear-gradient(145deg,rgba(127,29,29,.45),rgba(15,23,42,.95));
+          border:1px solid rgba(239,68,68,.22);
+          border-radius:28px;
+          padding:22px;
+        }
+
+        .alertPanel h2{
+          margin:0 0 18px;
+          font-size:28px;
+          font-weight:950;
+        }
+
+        .alertGrid{
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:14px;
+        }
+
+        .alertItem{
+          background:rgba(255,255,255,.05);
+          border-radius:18px;
+          padding:18px;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        }
+
+        .alertItem strong{
+          font-size:34px;
+          font-weight:950;
+          color:#fca5a5;
+        }
+
+        .alertItem span{
+          color:#cbd5e1;
+          font-weight:800;
+        }
+
+.grid{
           display:grid;
           grid-template-columns:repeat(5,minmax(0,1fr));
           gap:18px;
@@ -275,6 +352,8 @@ export default function AdminHomePage() {
         }
 
         @media(max-width:760px){
+          .alertGrid{grid-template-columns:1fr;}
+
           .page{
             padding:28px 14px 110px;
           }

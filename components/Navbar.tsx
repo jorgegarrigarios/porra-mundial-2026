@@ -37,10 +37,43 @@ export default function Navbar() {
   const [haySesion, setHaySesion] = useState(false);
   const [nombreVisible, setNombreVisible] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [alertasAdmin, setAlertasAdmin] = useState(0);
 
   const visibleLinks = useMemo(() => {
     return links.filter((link) => link.public || haySesion);
   }, [haySesion]);
+
+
+  async function cargarAlertasAdmin() {
+    try {
+      const ahora = new Date().toISOString();
+
+      const [ligasPendientes, partidosPendientes, pagosPendientes] =
+        await Promise.all([
+          supabase
+            .from("ligas")
+            .select("*", { count: "exact", head: true })
+            .eq("estado", "pendiente"),
+          supabase
+            .from("partidos")
+            .select("*", { count: "exact", head: true })
+            .lte("fecha_inicio", ahora)
+            .is("resultado_local", null),
+          supabase
+            .from("liga_pagos")
+            .select("*", { count: "exact", head: true })
+            .eq("pagado", false),
+        ]);
+
+      setAlertasAdmin(
+        (ligasPendientes.count ?? 0) +
+          (partidosPendientes.count ?? 0) +
+          (pagosPendientes.count ?? 0)
+      );
+    } catch {
+      setAlertasAdmin(0);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -56,6 +89,7 @@ export default function Navbar() {
         setHaySesion(false);
         setNombreVisible(null);
         setIsAdmin(false);
+        setAlertasAdmin(0);
         return;
       }
 
@@ -71,6 +105,9 @@ export default function Navbar() {
             obtenerNombreVisibleParticipante(participante, user.email)
           );
           setIsAdmin(participante.role === "admin");
+          if (participante.role === "admin") {
+            await cargarAlertasAdmin();
+          }
         } else {
           setNombreVisible(user.email || "Usuario");
           setIsAdmin(false);
@@ -104,9 +141,45 @@ export default function Navbar() {
       aplicarSesion(session);
     });
 
+    const ligasChannel = supabase
+      .channel("admin-alertas-ligas-navbar")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ligas" },
+        () => {
+          cargarAlertasAdmin();
+        }
+      )
+      .subscribe();
+
+    const partidosChannel = supabase
+      .channel("admin-alertas-partidos-navbar")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "partidos" },
+        () => {
+          cargarAlertasAdmin();
+        }
+      )
+      .subscribe();
+
+    const pagosChannel = supabase
+      .channel("admin-alertas-pagos-navbar")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "liga_pagos" },
+        () => {
+          cargarAlertasAdmin();
+        }
+      )
+      .subscribe();
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      supabase.removeChannel(ligasChannel);
+      supabase.removeChannel(partidosChannel);
+      supabase.removeChannel(pagosChannel);
     };
   }, []);
 
@@ -172,6 +245,9 @@ export default function Navbar() {
               >
                 <Shield size={17} />
                 Admin
+                {alertasAdmin > 0 && (
+                  <span className="adminAlertBadge">{alertasAdmin}</span>
+                )}
               </Link>
             )}
 
@@ -217,6 +293,9 @@ export default function Navbar() {
             >
               <Shield size={17} />
               <span className="mobileTopButtonText">Admin</span>
+              {alertasAdmin > 0 && (
+                <span className="adminAlertBadge mobile">{alertasAdmin}</span>
+              )}
             </Link>
           )}
 
@@ -395,7 +474,29 @@ export default function Navbar() {
           color: #fecaca;
         }
 
-        .activeAdminButton {
+        
+        .adminAlertBadge{
+          min-width:22px;
+          height:22px;
+          border-radius:999px;
+          background:#ef4444;
+          color:white;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:0 6px;
+          font-size:12px;
+          font-weight:950;
+          box-shadow:0 0 18px rgba(239,68,68,.45);
+        }
+
+        .adminAlertBadge.mobile{
+          min-width:18px;
+          height:18px;
+          font-size:10px;
+        }
+
+.activeAdminButton {
           background: #dc2626;
           color: white;
           box-shadow: 0 0 24px rgba(220,38,38,0.45);

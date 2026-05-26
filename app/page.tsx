@@ -42,6 +42,48 @@ type PartidoDestacado = {
   fase: string | null;
 };
 
+type Countdown = {
+  dias: number;
+  horas: number;
+  minutos: number;
+  segundos: number;
+  terminado: boolean;
+};
+
+const INICIO_MUNDIAL_2026 = new Date("2026-06-11T19:00:00+02:00");
+
+function calcularCountdown(): Countdown {
+  const diferencia = INICIO_MUNDIAL_2026.getTime() - Date.now();
+
+  if (diferencia <= 0) {
+    return {
+      dias: 0,
+      horas: 0,
+      minutos: 0,
+      segundos: 0,
+      terminado: true,
+    };
+  }
+
+  const segundosTotales = Math.floor(diferencia / 1000);
+  const dias = Math.floor(segundosTotales / 86400);
+  const horas = Math.floor((segundosTotales % 86400) / 3600);
+  const minutos = Math.floor((segundosTotales % 3600) / 60);
+  const segundos = segundosTotales % 60;
+
+  return {
+    dias,
+    horas,
+    minutos,
+    segundos,
+    terminado: false,
+  };
+}
+
+function formatearNumeroCountdown(valor: number) {
+  return valor.toString().padStart(2, "0");
+}
+
 export default function Home() {
   const [stats, setStats] = useState<HomeStats>({
     partidos: null,
@@ -54,9 +96,20 @@ export default function Home() {
     useState<PartidoDestacado | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [countdown, setCountdown] = useState<Countdown>(() => calcularCountdown());
 
   useEffect(() => {
     cargarDatosHome();
+  }, []);
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => {
+      setCountdown(calcularCountdown());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalo);
+    };
   }, []);
 
   async function cargarDatosHome() {
@@ -148,12 +201,7 @@ export default function Home() {
 
         <div className="heroContent">
           <div className="heroTextColumn">
-            <div className="versionLine">
-              <Sparkles size={16} />
-              <span>V1.2</span>
-            </div>
-
-            <h1 className="heroTitle">
+<h1 className="heroTitle">
               Porra Mundial
               <br />
               <span>2026</span>
@@ -174,6 +222,35 @@ export default function Home() {
                 <Target size={20} />
                 Hacer mi porra
               </Link>
+            </div>
+
+            <div className="countdownCard" aria-label="Cuenta atrás Mundial 2026">
+              <div className="countdownIntro">
+                <CalendarDays size={18} />
+                <span>
+                  {countdown.terminado
+                    ? "El Mundial ya ha empezado"
+                    : "Empieza el Mundial en"}
+                </span>
+              </div>
+
+              <div className="countdownGrid">
+                <CountdownItem value={countdown.dias} label="días" />
+                <CountdownItem
+                  value={formatearNumeroCountdown(countdown.horas)}
+                  label="horas"
+                />
+                <CountdownItem
+                  value={formatearNumeroCountdown(countdown.minutos)}
+                  label="min"
+                />
+                <CountdownItem
+                  value={formatearNumeroCountdown(countdown.segundos)}
+                  label="seg"
+                />
+              </div>
+
+              <p>Completa tu porra antes del primer partido.</p>
             </div>
           </div>
 
@@ -489,7 +566,7 @@ export default function Home() {
           z-index: 2;
           width: 100%;
           max-width: 1280px;
-          margin: 0 auto;
+          margin: 12px auto 28px;
           display: grid;
           grid-template-columns: minmax(0, 1.02fr) minmax(320px, 0.98fr);
           align-items: center;
@@ -498,23 +575,6 @@ export default function Home() {
 
         .heroTextColumn {
           min-width: 0;
-        }
-
-        .versionLine {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          border: 1px solid rgba(147,197,253,0.32);
-          background: rgba(37,99,235,0.16);
-          color: #bfdbfe;
-          border-radius: 999px;
-          padding: 9px 14px;
-          font-size: 12px;
-          font-weight: 950;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          margin-bottom: 18px;
-          backdrop-filter: blur(10px);
         }
 
         .heroTitle {
@@ -584,6 +644,73 @@ export default function Home() {
           filter: brightness(1.08);
         }
 
+        .countdownCard {
+          width: min(100%, 620px);
+          margin-top: 24px;
+          border-radius: 26px;
+          border: 1px solid rgba(250,204,21,0.24);
+          background:
+            radial-gradient(circle at top left, rgba(250,204,21,0.16), transparent 34%),
+            rgba(15,23,42,0.58);
+          backdrop-filter: blur(14px);
+          box-shadow: 0 22px 60px rgba(0,0,0,0.28);
+          padding: 18px;
+        }
+
+        .countdownIntro {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: #fde68a;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          margin-bottom: 13px;
+        }
+
+        .countdownGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .countdownItem {
+          border-radius: 18px;
+          background: rgba(2,6,23,0.56);
+          border: 1px solid rgba(255,255,255,0.11);
+          padding: 12px 10px;
+          text-align: center;
+        }
+
+        .countdownItem strong {
+          display: block;
+          font-size: clamp(28px, 3vw, 42px);
+          line-height: 0.95;
+          font-weight: 950;
+          letter-spacing: -0.055em;
+          color: white;
+        }
+
+        .countdownItem span {
+          display: block;
+          margin-top: 6px;
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.10em;
+          text-transform: uppercase;
+        }
+
+        .countdownCard p {
+          margin: 12px 0 0;
+          color: #fde68a;
+          font-size: 13px;
+          line-height: 1.4;
+          font-weight: 850;
+          text-shadow: none;
+        }
+
         .logoScene {
           position: relative;
           min-height: 585px;
@@ -621,7 +748,7 @@ export default function Home() {
           z-index: 2;
           width: 100%;
           max-width: 1180px;
-          margin: 22px auto 0;
+          margin: 54px auto 0;
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 0;
@@ -1060,11 +1187,6 @@ export default function Home() {
             gap: 24px;
           }
 
-          .versionLine {
-            margin-left: auto;
-            margin-right: auto;
-          }
-
           .heroTitle {
             font-size: clamp(48px, 13vw, 70px);
           }
@@ -1180,10 +1302,6 @@ export default function Home() {
             justify-content: flex-start;
           }
 
-          .versionLine {
-            display: none;
-          }
-
           .heroTextColumn {
             width: 100%;
             padding-top: 24px;
@@ -1209,6 +1327,43 @@ export default function Home() {
           .buttonRow {
             gap: 12px;
             margin-top: 26px;
+          }
+
+          .countdownCard {
+            width: 100%;
+            margin-top: 16px;
+            border-radius: 24px;
+            padding: 14px;
+          }
+
+          .countdownIntro {
+            justify-content: center;
+            width: 100%;
+            font-size: 10px;
+            margin-bottom: 10px;
+          }
+
+          .countdownGrid {
+            gap: 7px;
+          }
+
+          .countdownItem {
+            border-radius: 15px;
+            padding: 10px 6px;
+          }
+
+          .countdownItem strong {
+            font-size: clamp(24px, 8vw, 35px);
+          }
+
+          .countdownItem span {
+            font-size: 9px;
+          }
+
+          .countdownCard p {
+            text-align: center;
+            font-size: 12px;
+            margin-top: 10px;
           }
 
           .primaryButton,
@@ -1293,6 +1448,18 @@ export default function Home() {
             max-width: 96%;
           }
 
+          .countdownCard {
+            padding: 12px;
+          }
+
+          .countdownItem strong {
+            font-size: 23px;
+          }
+
+          .countdownCard p {
+            display: none;
+          }
+
           .primaryButton,
           .secondaryButton {
             min-height: 58px;
@@ -1306,6 +1473,21 @@ export default function Home() {
         }
       `}</style>
     </main>
+  );
+}
+
+function CountdownItem({
+  value,
+  label,
+}: {
+  value: number | string;
+  label: string;
+}) {
+  return (
+    <div className="countdownItem">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
   );
 }
 
