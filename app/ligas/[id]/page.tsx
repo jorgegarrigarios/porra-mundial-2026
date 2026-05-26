@@ -1430,7 +1430,7 @@ function Styles() {
 
       @media (max-width: 640px) {
         .page {
-          padding: 84px 14px 125px;
+          padding: 34px 14px 125px;
         }
 
         .hero {

@@ -977,7 +977,7 @@ export default function LigasPage() {
 
         @media (max-width: 860px) {
           .ligasPage {
-            padding: 84px 14px 125px;
+            padding: 36px 14px 110px;
           }
 
           .ligasHeader {
@@ -1028,7 +1028,7 @@ export default function LigasPage() {
 
         @media (max-width: 430px) {
           .ligasPage {
-            padding-top: 78px;
+            padding-top: 32px;
           }
 
           .ligasHeader h1 {
