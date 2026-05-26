@@ -167,6 +167,7 @@ export default function LigaDetallePage({ params }: Props) {
   const [guardandoInscripcion, setGuardandoInscripcion] = useState(false);
   const [mensajeInscripcion, setMensajeInscripcion] = useState("");
   const [pagoUsuario, setPagoUsuario] = useState<PagoUsuario | null>(null);
+  const [pagosLiga, setPagosLiga] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     const id = Number(resolvedParams.id);
@@ -365,6 +366,29 @@ export default function LigaDetallePage({ params }: Props) {
           ) ?? [];
 
       const idsMiembros = miembros.map((miembro) => miembro.id);
+
+      const { data: pagosLigaData } = await conTimeout(
+        idsMiembros.length > 0
+          ? supabase
+              .from("liga_pagos")
+              .select("participante_id, pagado")
+              .eq("liga_id", id)
+              .in("participante_id", idsMiembros)
+          : supabase
+              .from("liga_pagos")
+              .select("participante_id, pagado")
+              .eq("liga_id", -1),
+        10000,
+        "No se ha podido cargar el estado de pagos."
+      );
+
+      const pagosMap: Record<number, boolean> = {};
+
+      (pagosLigaData ?? []).forEach((item: any) => {
+        pagosMap[item.participante_id] = Boolean(item.pagado);
+      });
+
+      setPagosLiga(pagosMap);
 
       const [
         { data: pronosticosData, error: pronosticosError },
@@ -1030,6 +1054,11 @@ export default function LigaDetallePage({ params }: Props) {
                     <h3>
                       {miembro.nombre}
                       {esUsuario && <span>Tú</span>}
+                      {pagosLiga[miembro.id] ? (
+                        <span className="paymentBadge paid">Pagado</span>
+                      ) : (
+                        <span className="paymentBadge pending">Pago pendiente</span>
+                      )}
                     </h3>
 
                     <p>
@@ -1992,6 +2021,30 @@ function Styles() {
         color: #fecaca;
         background: rgba(239,68,68,0.10);
         border-color: rgba(239,68,68,0.24);
+      }
+
+
+      .paymentBadge {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 950;
+        vertical-align: middle;
+      }
+
+      .paymentBadge.paid {
+        background: rgba(34,197,94,0.18);
+        border: 1px solid rgba(34,197,94,0.28);
+        color: #86efac;
+      }
+
+      .paymentBadge.pending {
+        background: rgba(250,204,21,0.16);
+        border: 1px solid rgba(250,204,21,0.28);
+        color: #fde68a;
       }
 
       @media (max-width: 920px) {
