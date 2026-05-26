@@ -14,6 +14,10 @@ import {
   CheckCircle2,
   Users,
   Shield,
+  Flag,
+  Award,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -144,29 +148,44 @@ export default function Home() {
 
         <div className="heroContent">
           <div>
-            <p className="eyebrow">La mejor porra del Mundial</p>
+            <p className="eyebrow">Porra Mundial 2026 · V1.2 Beta</p>
 
             <h1 className="heroTitle">
-              Porra Mundial
+              Compite con tus amigos
               <br />
-              <span>2026</span>
+              <span>en el Mundial</span>
             </h1>
 
             <p className="heroText">
-              Compite con tus amigos, haz tus pronósticos y demuestra quién sabe
-              más de fútbol.
+              Crea una liga privada, haz tus pronósticos, elige tus bonus y
+              demuestra quién sabe más de fútbol durante todo el Mundial 2026.
             </p>
 
             <div className="buttonRow">
-              <Link href="/partidos" className="primaryButton">
-                <CalendarDays size={20} />
-                Ver Partidos
+              <Link href="/ligas" className="primaryButton">
+                <Users size={20} />
+                Crear o unirme a una liga
               </Link>
 
               <Link href="/mis-pronosticos" className="secondaryButton">
                 <Target size={20} />
-                Hacer Pronósticos
+                Hacer mi porra
               </Link>
+            </div>
+
+            <div className="heroBadges">
+              <span>
+                <Lock size={15} />
+                Ligas privadas
+              </span>
+              <span>
+                <Flag size={15} />
+                Grupos 1X2
+              </span>
+              <span>
+                <Award size={15} />
+                Bonus oficiales
+              </span>
             </div>
           </div>
 
@@ -186,7 +205,7 @@ export default function Home() {
             icon={<CalendarDays size={28} />}
             title="Partidos cargados"
             value={valorStat(stats.partidos)}
-            detail="calendario oficial"
+            detail="calendario del Mundial"
             color="#2563eb"
           />
 
@@ -202,7 +221,7 @@ export default function Home() {
             icon={<Target size={28} />}
             title="Pronósticos"
             value={valorStat(stats.pronosticos)}
-            detail="predicciones guardadas"
+            detail="predicciones de partidos"
             color="#7c3aed"
           />
 
@@ -215,31 +234,59 @@ export default function Home() {
           />
         </div>
 
-        <h2 className="sectionTitle">Accesos rápidos</h2>
+        <section className="versionPanel">
+          <div>
+            <div className="versionEyebrow">
+              <Sparkles size={16} />
+              Versión actual
+            </div>
+
+            <h2>V1.2 Beta preparada para ligas privadas</h2>
+
+            <p>
+              Una sola porra por usuario que cuenta en todas sus ligas:
+              pronósticos de partidos, clasificados de grupo y bonus oficiales.
+            </p>
+          </div>
+
+          <Link href="/reglas" className="outlineButton compact">
+            Ver reglas
+          </Link>
+        </section>
+
+        <h2 className="sectionTitle">Completa tu porra</h2>
 
         <div className="quickGrid">
           <QuickCard
-            href="/partidos"
-            icon={<CalendarDays size={36} />}
-            title="Ver Partidos"
-            text="Consulta todos los partidos del Mundial 2026."
+            href="/mis-pronosticos"
+            icon={<Target size={36} />}
+            title="Partidos"
+            text="En fase de grupos pronosticas 1X2. En eliminatorias, marcador exacto."
             color="#2563eb"
           />
 
           <QuickCard
-            href="/mis-pronosticos"
-            icon={<Target size={36} />}
-            title="Hacer Pronósticos"
-            text="Realiza tus predicciones antes de que empiece cada partido."
+            href="/grupos"
+            icon={<Flag size={36} />}
+            title="Clasificados de grupo"
+            text="Elige las dos selecciones que crees que pasarán de cada grupo."
             color="#16a34a"
+          />
+
+          <QuickCard
+            href="/bonus"
+            icon={<Award size={36} />}
+            title="Bonus oficiales"
+            text="Campeón, finalistas, Bota de Oro, MVP, mejor portero, revelación y decepción."
+            color="#7c3aed"
           />
 
           <QuickCard
             href="/ligas"
             icon={<Users size={36} />}
-            title="Mis Ligas"
-            text="Crea ligas privadas o únete con un código."
-            color="#7c3aed"
+            title="Mis ligas"
+            text="Crea una liga privada, únete con un código y compite con tus amigos."
+            color="#f59e0b"
           />
         </div>
 
@@ -288,7 +335,7 @@ export default function Home() {
             <div className="matchAside">
               <h3>¿Ya hiciste tu pronóstico?</h3>
 
-              <p>Guarda tu resultado antes de que empiece el partido.</p>
+              <p>Guarda tu predicción antes de que empiece el partido.</p>
 
               <Link href="/mis-pronosticos" className="primaryButton">
                 <Target size={20} />
@@ -306,60 +353,60 @@ export default function Home() {
           <div className="panel">
             <h2 className="panelTitle">
               <Crown size={24} color="#facc15" />
-              Competición
+              Cómo funciona
             </h2>
 
             <InfoRow
               icon={<CheckCircle2 size={22} />}
               color="#16a34a"
-              title="Pronósticos reales"
-              text="Cada usuario guarda sus predicciones en Supabase."
-            />
-
-            <InfoRow
-              icon={<Trophy size={22} />}
-              color="#f59e0b"
-              title="Ranking automático"
-              text="La clasificación se calcula con los puntos de cada participante."
+              title="Una porra por usuario"
+              text="Tus pronósticos, grupos y bonus aplican a todas las ligas donde participes."
             />
 
             <InfoRow
               icon={<Users size={22} />}
               color="#2563eb"
               title="Ligas privadas"
-              text="Puedes competir en grupos privados con tus amigos."
+              text="Solo ves las ligas donde participas o aquellas a las que entras con invitación/código."
             />
 
-            <Link href="/ranking" className="outlineButton">
-              Ver ranking
+            <InfoRow
+              icon={<Trophy size={22} />}
+              color="#f59e0b"
+              title="Ranking por liga"
+              text="Cada liga ordena únicamente a sus participantes, usando la porra de cada usuario."
+            />
+
+            <Link href="/ligas" className="outlineButton">
+              Ir a mis ligas
             </Link>
           </div>
 
           <div className="panel">
             <h2 className="panelTitle">
               <Zap size={24} color="#facc15" />
-              Sistema de puntos
+              Sistema V1.2
             </h2>
 
             <InfoRow
-              icon={<Trophy size={22} />}
-              color="#f59e0b"
-              title="5 puntos"
-              text="Marcador exacto."
+              icon={<Flag size={22} />}
+              color="#2563eb"
+              title="Fase de grupos"
+              text="Pronóstico 1X2. Acierto del signo: 3 puntos."
             />
 
             <InfoRow
               icon={<Target size={22} />}
               color="#16a34a"
-              title="3 puntos"
-              text="Ganador o empate correcto."
+              title="Eliminatorias"
+              text="Marcador exacto: 5 puntos. Clasificado/ganador correcto: 3 puntos."
             />
 
             <InfoRow
-              icon={<TrendingUp size={22} />}
-              color="#2563eb"
-              title="1 punto"
-              text="Diferencia de goles correcta."
+              icon={<Award size={22} />}
+              color="#7c3aed"
+              title="Bonus oficiales"
+              text="Campeón, finalistas, goleador, MVP, portero, revelación y decepción."
             />
 
             <Link href="/reglas" className="outlineButton">
@@ -375,9 +422,10 @@ export default function Home() {
             </div>
 
             <div>
-              <h2>V1 Beta ya disponible</h2>
+              <h2>V1.2 Beta lista para probar</h2>
               <p>
-                Crea tu liga, invita a tus amigos y empieza a competir.
+                Crea tu liga, invita a tus amigos y completa tu porra antes de
+                que empiece el Mundial.
               </p>
             </div>
           </div>
@@ -415,7 +463,9 @@ export default function Home() {
         .overlay {
           position: absolute;
           inset: 0;
-          background: linear-gradient(90deg, rgba(2,6,23,0.92) 0%, rgba(2,6,23,0.68) 42%, rgba(2,6,23,0.18) 100%);
+          background:
+            radial-gradient(circle at 75% 15%, rgba(37,99,235,0.34), transparent 28%),
+            linear-gradient(90deg, rgba(2,6,23,0.94) 0%, rgba(2,6,23,0.72) 42%, rgba(2,6,23,0.24) 100%);
         }
 
         .heroContent {
@@ -431,31 +481,32 @@ export default function Home() {
         }
 
         .eyebrow {
-          color: #3b82f6;
-          font-weight: 900;
-          letter-spacing: 5px;
+          color: #93c5fd;
+          font-weight: 950;
+          letter-spacing: 4px;
           text-transform: uppercase;
           margin-bottom: 26px;
-          font-size: 14px;
+          font-size: 13px;
         }
 
         .heroTitle {
-          font-size: 96px;
-          line-height: 0.9;
-          font-weight: 900;
+          font-size: clamp(54px, 8vw, 96px);
+          line-height: 0.92;
+          letter-spacing: -0.06em;
+          font-weight: 950;
           margin: 0;
         }
 
         .heroTitle span {
-          color: #2563eb;
+          color: #60a5fa;
         }
 
         .heroText {
           margin-top: 28px;
           color: #d1d5db;
-          font-size: 24px;
-          line-height: 1.6;
-          max-width: 650px;
+          font-size: 23px;
+          line-height: 1.55;
+          max-width: 690px;
         }
 
         .buttonRow {
@@ -474,17 +525,38 @@ export default function Home() {
           border-radius: 16px;
           color: white;
           text-decoration: none;
-          font-weight: 900;
+          font-weight: 950;
           font-size: 17px;
         }
 
         .primaryButton {
           background: #2563eb;
+          box-shadow: 0 18px 46px rgba(37,99,235,0.32);
         }
 
         .secondaryButton {
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.14);
+        }
+
+        .heroBadges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-top: 22px;
+        }
+
+        .heroBadges span {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(15,23,42,0.62);
+          color: #dbeafe;
+          border-radius: 999px;
+          padding: 9px 12px;
+          font-size: 13px;
+          font-weight: 900;
         }
 
         .logoWrap {
@@ -518,7 +590,7 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 16px;
-          background: rgba(15,23,42,0.82);
+          background: rgba(15,23,42,0.86);
           border: 1px solid rgba(255,255,255,0.12);
           backdrop-filter: blur(18px);
           border-radius: 24px;
@@ -539,14 +611,14 @@ export default function Home() {
           color: #cbd5e1;
           font-size: 12px;
           text-transform: uppercase;
-          font-weight: 900;
+          font-weight: 950;
           letter-spacing: 1px;
           margin: 0;
         }
 
         .statValue {
           font-size: 34px;
-          font-weight: 900;
+          font-weight: 950;
           margin: 4px 0 0;
         }
 
@@ -556,25 +628,72 @@ export default function Home() {
           margin: 0;
         }
 
+        .versionPanel {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 22px;
+          margin-top: 28px;
+          border: 1px solid rgba(96,165,250,0.24);
+          background: linear-gradient(135deg, rgba(37,99,235,0.20), rgba(15,23,42,0.82));
+          border-radius: 28px;
+          padding: 26px;
+        }
+
+        .versionEyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: #bfdbfe;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          margin-bottom: 10px;
+        }
+
+        .versionPanel h2 {
+          margin: 0;
+          font-size: 30px;
+          line-height: 1.05;
+          font-weight: 950;
+          letter-spacing: -0.04em;
+        }
+
+        .versionPanel p {
+          max-width: 760px;
+          color: #cbd5e1;
+          line-height: 1.55;
+          font-weight: 750;
+          margin: 10px 0 0;
+        }
+
         .sectionTitle {
           font-size: 30px;
-          font-weight: 900;
+          font-weight: 950;
           margin-top: 38px;
           margin-bottom: 22px;
+          letter-spacing: -0.03em;
         }
 
         .quickGrid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 20px;
         }
 
         .quickCard {
           background: linear-gradient(145deg, rgba(15,23,42,0.95), rgba(15,23,42,0.55));
           border: 1px solid rgba(255,255,255,0.12);
           border-radius: 28px;
-          padding: 30px;
-          min-height: 210px;
+          padding: 26px;
+          min-height: 230px;
+          transition: transform 0.18s ease, border-color 0.18s ease;
+        }
+
+        .quickCard:hover {
+          transform: translateY(-2px);
+          border-color: rgba(147,197,253,0.42);
         }
 
         .quickIcon {
@@ -623,7 +742,7 @@ export default function Home() {
           color: #e5e7eb;
           border-radius: 10px;
           padding: 8px 14px;
-          font-weight: 900;
+          font-weight: 950;
           text-transform: uppercase;
           font-size: 13px;
         }
@@ -635,13 +754,13 @@ export default function Home() {
 
         .matchTime {
           font-size: 42px;
-          font-weight: 900;
+          font-weight: 950;
           margin: 6px 0;
         }
 
         .vs {
-          color: #2563eb;
-          font-weight: 900;
+          color: #60a5fa;
+          font-weight: 950;
           font-size: 22px;
         }
 
@@ -656,7 +775,7 @@ export default function Home() {
 
         .matchAside h3 {
           font-size: 22px;
-          font-weight: 900;
+          font-weight: 950;
           margin: 0;
         }
 
@@ -689,7 +808,7 @@ export default function Home() {
         .flagFallback {
           color: #94a3b8;
           font-size: 28px;
-          font-weight: 900;
+          font-weight: 950;
         }
 
         .team {
@@ -698,7 +817,7 @@ export default function Home() {
 
         .teamName {
           font-size: 20px;
-          font-weight: 900;
+          font-weight: 950;
           margin-top: 12px;
         }
 
@@ -721,7 +840,7 @@ export default function Home() {
           align-items: center;
           gap: 10px;
           font-size: 24px;
-          font-weight: 900;
+          font-weight: 950;
           margin-bottom: 18px;
         }
 
@@ -747,7 +866,7 @@ export default function Home() {
 
         .infoTitle {
           color: white;
-          font-weight: 900;
+          font-weight: 950;
           margin: 0 0 4px;
         }
 
@@ -764,9 +883,15 @@ export default function Home() {
           padding: 14px;
           border-radius: 14px;
           border: 1px solid rgba(37,99,235,0.75);
-          color: #3b82f6;
+          color: #93c5fd;
           text-decoration: none;
-          font-weight: 900;
+          font-weight: 950;
+        }
+
+        .outlineButton.compact {
+          margin-top: 0;
+          white-space: nowrap;
+          padding: 14px 18px;
         }
 
         .finalBanner {
@@ -789,7 +914,7 @@ export default function Home() {
 
         .finalText h2 {
           font-size: 26px;
-          font-weight: 900;
+          font-weight: 950;
           margin: 0;
         }
 
@@ -809,6 +934,12 @@ export default function Home() {
           flex-shrink: 0;
         }
 
+        @media (max-width: 1080px) {
+          .quickGrid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
         @media (max-width: 900px) {
           .hero {
             min-height: auto;
@@ -818,10 +949,6 @@ export default function Home() {
             grid-template-columns: 1fr;
             padding: 56px 20px 90px;
             text-align: center;
-          }
-
-          .heroTitle {
-            font-size: 58px;
           }
 
           .heroText {
@@ -839,6 +966,10 @@ export default function Home() {
             width: 100%;
           }
 
+          .heroBadges {
+            justify-content: center;
+          }
+
           .worldLogo {
             max-width: 280px;
           }
@@ -848,8 +979,9 @@ export default function Home() {
             margin-top: -46px;
           }
 
-          .quickGrid {
-            grid-template-columns: 1fr;
+          .versionPanel {
+            flex-direction: column;
+            align-items: stretch;
           }
 
           .featuredMatch {
@@ -879,9 +1011,10 @@ export default function Home() {
           }
         }
 
-        @media (max-width: 520px) {
-          .heroTitle {
-            font-size: 44px;
+        @media (max-width: 560px) {
+          .contentWrap {
+            padding-left: 16px;
+            padding-right: 16px;
           }
 
           .eyebrow {
@@ -889,7 +1022,15 @@ export default function Home() {
             letter-spacing: 3px;
           }
 
+          .heroTitle {
+            font-size: 44px;
+          }
+
           .statsGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .quickGrid {
             grid-template-columns: 1fr;
           }
 
@@ -899,6 +1040,10 @@ export default function Home() {
 
           .sectionTitle {
             font-size: 26px;
+          }
+
+          .versionPanel h2 {
+            font-size: 25px;
           }
         }
       `}</style>
@@ -954,7 +1099,7 @@ function QuickCard({
           {icon}
         </div>
 
-        <h3 style={{ fontSize: "26px", fontWeight: 900, marginTop: "24px" }}>
+        <h3 style={{ fontSize: "24px", fontWeight: 950, marginTop: "22px" }}>
           {title}
         </h3>
 
