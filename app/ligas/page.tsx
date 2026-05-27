@@ -288,6 +288,7 @@ export default function LigasPage() {
 
       setCodigoLiga("");
       setMensaje("Te has unido correctamente a la liga.");
+      window.alert(`✅ Te has unido correctamente a ${liga.nombre}`);
       await cargar();
     } catch (err) {
       console.error("Error uniéndose a liga:", err);
