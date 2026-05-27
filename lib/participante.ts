@@ -142,11 +142,13 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
 
     if (participanteResponse.data) {
       const participanteExistente = participanteResponse.data;
+      const roleNormalizado =
+        participanteExistente.role === "admin" ? "admin" : "user";
 
       const necesitaActualizar =
         !participanteExistente.nombre ||
         !participanteExistente.nickname ||
-        !participanteExistente.role ||
+        participanteExistente.role !== roleNormalizado ||
         participanteExistente.acepta_privacidad !== true ||
         participanteExistente.acepta_terminos !== true;
 
@@ -162,7 +164,7 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
             apellidos:
               participanteExistente.apellidos || apellidosMetadata || null,
             nickname: participanteExistente.nickname || nicknameFallback,
-            role: participanteExistente.role || "user",
+            role: roleNormalizado,
             acepta_privacidad: true,
             acepta_terminos: true,
           })
