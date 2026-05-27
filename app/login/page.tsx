@@ -104,6 +104,79 @@ export default function LoginPage() {
     return "/";
   }
 
+  async function asegurarParticipanteSesionActual() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const user = session?.user;
+
+    if (!user) return false;
+
+    const { data: participanteExistente, error: participanteError } =
+      await supabase
+        .from("participantes")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+    if (participanteError) {
+      throw new Error(participanteError.message);
+    }
+
+    if (participanteExistente?.id) {
+      return true;
+    }
+
+    const metadata = user.user_metadata ?? {};
+    const emailUsuario = user.email ?? "";
+    const emailBase = emailUsuario.split("@")[0] || "Usuario";
+
+    const nombreMetadata =
+      typeof metadata.nombre === "string" && metadata.nombre.trim()
+        ? metadata.nombre.trim()
+        : typeof metadata.full_name === "string" && metadata.full_name.trim()
+          ? metadata.full_name.trim().split(" ").filter(Boolean)[0] || "Usuario"
+          : typeof metadata.name === "string" && metadata.name.trim()
+            ? metadata.name.trim().split(" ").filter(Boolean)[0] || "Usuario"
+            : emailBase;
+
+    const apellidosMetadata =
+      typeof metadata.apellidos === "string" && metadata.apellidos.trim()
+        ? metadata.apellidos.trim()
+        : typeof metadata.full_name === "string" && metadata.full_name.trim()
+          ? metadata.full_name.trim().split(" ").filter(Boolean).slice(1).join(" ") || null
+          : typeof metadata.name === "string" && metadata.name.trim()
+            ? metadata.name.trim().split(" ").filter(Boolean).slice(1).join(" ") || null
+            : null;
+
+    const nicknameMetadata =
+      typeof metadata.nickname === "string" && metadata.nickname.trim()
+        ? metadata.nickname.trim()
+        : typeof metadata.preferred_username === "string" &&
+            metadata.preferred_username.trim()
+          ? metadata.preferred_username.trim()
+          : typeof metadata.full_name === "string" && metadata.full_name.trim()
+            ? metadata.full_name.trim()
+            : emailBase;
+
+    const { error: insertError } = await supabase.from("participantes").insert({
+      auth_user_id: user.id,
+      nombre: nombreMetadata,
+      apellidos: apellidosMetadata,
+      nickname: nicknameMetadata,
+      acepta_terminos: true,
+      acepta_privacidad: true,
+      role: "user",
+    });
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+
+    return true;
+  }
+
   function redirigirDespuesDeLogin() {
     const destino = obtenerDestinoPostLogin();
 
@@ -194,7 +267,21 @@ export default function LoginPage() {
           : "Email confirmado correctamente. Ya puedes iniciar sesión y empezar tu porra."
       );
 
-      supabase.auth.getSession().then(({ data }) => {
+      supabase.auth.getSession().then(async ({ data }) => {
+        if (data.session) {
+          try {
+            await asegurarParticipanteSesionActual();
+          } catch (err) {
+            const message =
+              err instanceof Error
+                ? err.message
+                : "Email confirmado, pero no se ha podido preparar tu perfil.";
+            setError(message);
+            window.history.replaceState({}, document.title, "/login");
+            return;
+          }
+        }
+
         if (data.session && esDestinoInternoSeguro(invitacionPendiente)) {
           window.localStorage.removeItem(INVITACION_PENDIENTE_KEY);
           router.replace(invitacionPendiente as string);
@@ -316,6 +403,17 @@ export default function LoginPage() {
       return;
     }
 
+    try {
+      await asegurarParticipanteSesionActual();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Has iniciado sesión, pero no se ha podido cargar tu perfil.";
+      setError(message);
+      return;
+    }
+
     redirigirDespuesDeLogin();
   }
 
@@ -377,27 +475,16 @@ export default function LoginPage() {
       return;
     }
 
-    if (data.user?.id) {
-      const { error: participanteError } = await supabase
-        .from("participantes")
-        .upsert(
-          {
-            auth_user_id: data.user.id,
-            nombre: nombre.trim(),
-            apellidos: apellidos.trim() || null,
-            nickname: nickname.trim(),
-            acepta_terminos: true,
-            acepta_privacidad: true,
-            role: "user",
-          },
-          {
-            onConflict: "auth_user_id",
-          }
-        );
-
-      if (participanteError) {
+    if (data.session) {
+      try {
+        await asegurarParticipanteSesionActual();
+      } catch (err) {
         setCargando(false);
-        setError(participanteError.message);
+        const message =
+          err instanceof Error
+            ? err.message
+            : "La cuenta se ha creado, pero no se ha podido preparar tu perfil.";
+        setError(message);
         return;
       }
     }
