@@ -96,13 +96,49 @@ export default function Home() {
     useState<PartidoDestacado | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [countdown, setCountdown] = useState<Countdown>(() => calcularCountdown());
+  const [haySesion, setHaySesion] = useState(false);
+  const [countdown, setCountdown] = useState<Countdown>({
+    dias: 0,
+    horas: 0,
+    minutos: 0,
+    segundos: 0,
+    terminado: false,
+  });
 
   useEffect(() => {
     cargarDatosHome();
   }, []);
 
   useEffect(() => {
+    let activo = true;
+
+    async function comprobarSesion() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (activo) {
+        setHaySesion(Boolean(session));
+      }
+    }
+
+    comprobarSesion();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setHaySesion(Boolean(session));
+      }
+    );
+
+    return () => {
+      activo = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    setCountdown(calcularCountdown());
+
     const intervalo = window.setInterval(() => {
       setCountdown(calcularCountdown());
     }, 1000);
@@ -193,6 +229,10 @@ export default function Home() {
     return valor !== null ? valor.toString() : "0";
   }
 
+  function rutaPrivada(ruta: string) {
+    return haySesion ? ruta : "/login";
+  }
+
   return (
     <main className="home">
       <section className="hero">
@@ -213,12 +253,12 @@ export default function Home() {
             </p>
 
             <div className="buttonRow">
-              <Link href="/ligas" className="primaryButton">
+              <Link href={rutaPrivada("/ligas")} className="primaryButton">
                 <Users size={20} />
                 Crear o unirme a una liga
               </Link>
 
-              <Link href="/mis-pronosticos" className="secondaryButton">
+              <Link href={rutaPrivada("/mis-pronosticos")} className="secondaryButton">
                 <Target size={20} />
                 Hacer mi porra
               </Link>
@@ -315,7 +355,7 @@ export default function Home() {
             </p>
           </div>
 
-          <Link href="/reglas" className="outlineButton compact">
+          <Link href={rutaPrivada("/reglas")} className="outlineButton compact">
             Ver reglas
           </Link>
         </section>
@@ -324,7 +364,7 @@ export default function Home() {
 
         <div className="quickGrid">
           <QuickCard
-            href="/mis-pronosticos"
+            href={rutaPrivada("/mis-pronosticos")}
             icon={<Target size={36} />}
             title="Partidos"
             text="En fase de grupos pronosticas 1X2. En eliminatorias, marcador exacto."
@@ -332,7 +372,7 @@ export default function Home() {
           />
 
           <QuickCard
-            href="/grupos"
+            href={rutaPrivada("/grupos")}
             icon={<Flag size={36} />}
             title="Clasificados de grupo"
             text="Elige las dos selecciones que crees que pasarán de cada grupo."
@@ -340,7 +380,7 @@ export default function Home() {
           />
 
           <QuickCard
-            href="/bonus"
+            href={rutaPrivada("/bonus")}
             icon={<Award size={36} />}
             title="Bonus oficiales"
             text="Campeón, finalistas, Bota de Oro, MVP, mejor portero, revelación y decepción."
@@ -348,7 +388,7 @@ export default function Home() {
           />
 
           <QuickCard
-            href="/ligas"
+            href={rutaPrivada("/ligas")}
             icon={<Users size={36} />}
             title="Mis ligas"
             text="Crea una liga privada, únete con un código y compite con tus amigos."
@@ -423,7 +463,7 @@ export default function Home() {
 
               <p>Guarda tu predicción antes de que empiece el partido.</p>
 
-              <Link href="/mis-pronosticos" className="primaryButton">
+              <Link href={rutaPrivada("/mis-pronosticos")} className="primaryButton">
                 <Target size={20} />
                 Hacer Pronóstico
               </Link>
@@ -463,7 +503,7 @@ export default function Home() {
               text="Cada liga ordena únicamente a sus participantes, usando la porra de cada usuario."
             />
 
-            <Link href="/ligas" className="outlineButton">
+            <Link href={rutaPrivada("/ligas")} className="outlineButton">
               Ir a mis ligas
             </Link>
           </div>
@@ -495,7 +535,7 @@ export default function Home() {
               text="Campeón, finalistas, goleador, MVP, portero, revelación y decepción."
             />
 
-            <Link href="/reglas" className="outlineButton">
+            <Link href={rutaPrivada("/reglas")} className="outlineButton">
               Ver reglas completas
             </Link>
           </div>
@@ -516,7 +556,7 @@ export default function Home() {
             </div>
           </div>
 
-          <Link href="/ligas" className="primaryButton">
+          <Link href={rutaPrivada("/ligas")} className="primaryButton">
             <Users size={20} />
             Crear o unirme a una liga
           </Link>

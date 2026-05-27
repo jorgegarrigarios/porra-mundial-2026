@@ -17,6 +17,13 @@ import {
 import { supabase } from "@/lib/supabase";
 
 type ModoFormulario = "login" | "registro" | "reset";
+type TipoMensajeEspecial = "registro" | "confirmacion" | "reset" | "invitacion" | null;
+
+const INVITACION_PENDIENTE_KEY = "porra_invitacion_pendiente";
+
+function esDestinoInternoSeguro(destino: string | null): destino is string {
+  return Boolean(destino && destino.startsWith("/") && !destino.startsWith("//"));
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,10 +41,14 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
+  const [tipoMensajeEspecial, setTipoMensajeEspecial] =
+    useState<TipoMensajeEspecial>(null);
+  const [emailPendienteConfirmacion, setEmailPendienteConfirmacion] = useState("");
 
   function limpiarAvisos() {
     setMensaje("");
     setError("");
+    setTipoMensajeEspecial(null);
   }
 
   function obtenerNombreGoogle(fullName: string | null | undefined) {
@@ -54,6 +65,54 @@ export default function LoginPage() {
       nombreGoogle: partes[0],
       apellidosGoogle: partes.slice(1).join(" ") || null,
     };
+  }
+
+  function obtenerUrlCorreo() {
+    const emailNormalizado = (emailPendienteConfirmacion || email).trim().toLowerCase();
+
+    if (emailNormalizado.includes("@gmail.")) {
+      return "https://mail.google.com/";
+    }
+
+    if (
+      emailNormalizado.includes("@outlook.") ||
+      emailNormalizado.includes("@hotmail.") ||
+      emailNormalizado.includes("@live.") ||
+      emailNormalizado.includes("@msn.")
+    ) {
+      return "https://outlook.live.com/mail/";
+    }
+
+    return null;
+  }
+
+  function obtenerDestinoPostLogin(): string {
+    if (typeof window === "undefined") return "/";
+
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    const invitacionPendiente = window.localStorage.getItem(INVITACION_PENDIENTE_KEY);
+
+    if (esDestinoInternoSeguro(returnTo)) {
+      return returnTo;
+    }
+
+    if (esDestinoInternoSeguro(invitacionPendiente)) {
+      return invitacionPendiente;
+    }
+
+    return "/";
+  }
+
+  function redirigirDespuesDeLogin() {
+    const destino = obtenerDestinoPostLogin();
+
+    if (typeof window !== "undefined" && destino !== "/") {
+      window.localStorage.removeItem(INVITACION_PENDIENTE_KEY);
+    }
+
+    router.replace(destino);
+    router.refresh();
   }
 
   async function asegurarParticipanteGoogle() {
@@ -102,7 +161,7 @@ export default function LoginPage() {
       nickname: nicknameBase,
       acepta_terminos: true,
       acepta_privacidad: true,
-      role: "usuario",
+      role: "user",
     });
 
     if (insertError) {
@@ -111,6 +170,57 @@ export default function LoginPage() {
 
     return true;
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const tipo = params.get("type") ?? hashParams.get("type");
+    const emailConfirmado =
+      params.get("email_confirmed") === "1" ||
+      params.get("confirmed") === "1" ||
+      tipo === "signup" ||
+      tipo === "email_change";
+    const resetPassword = tipo === "recovery" || params.get("reset") === "1";
+    const invitacionPendiente = window.localStorage.getItem(INVITACION_PENDIENTE_KEY);
+
+    if (emailConfirmado) {
+      setModo("login");
+      setTipoMensajeEspecial("confirmacion");
+      setMensaje(
+        invitacionPendiente
+          ? "Email confirmado correctamente. Inicia sesión y te llevaremos automáticamente a la liga invitada."
+          : "Email confirmado correctamente. Ya puedes iniciar sesión y empezar tu porra."
+      );
+
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session && esDestinoInternoSeguro(invitacionPendiente)) {
+          window.localStorage.removeItem(INVITACION_PENDIENTE_KEY);
+          router.replace(invitacionPendiente as string);
+          router.refresh();
+          return;
+        }
+
+        window.history.replaceState({}, document.title, "/login");
+      });
+
+      return;
+    }
+
+    if (resetPassword) {
+      setModo("login");
+      setTipoMensajeEspecial("reset");
+      setMensaje("Enlace validado correctamente. Ya puedes iniciar sesión.");
+      window.history.replaceState({}, document.title, "/login");
+      return;
+    }
+
+    if (invitacionPendiente) {
+      setTipoMensajeEspecial("invitacion");
+      setMensaje("Inicia sesión o crea tu cuenta y te llevaremos automáticamente a la liga invitada.");
+    }
+  }, [router]);
 
   useEffect(() => {
     const vieneDeGoogle =
@@ -131,8 +241,7 @@ export default function LoginPage() {
         if (!activo) return;
 
         if (ok) {
-          router.replace("/");
-          router.refresh();
+          redirigirDespuesDeLogin();
           return;
         }
 
@@ -164,9 +273,12 @@ export default function LoginPage() {
     limpiarAvisos();
     setCargando(true);
 
+    const destinoPostLogin = obtenerDestinoPostLogin();
+    const returnToParam =
+      destinoPostLogin !== "/" ? `&returnTo=${encodeURIComponent(destinoPostLogin)}` : "";
     const redirectTo =
       typeof window !== "undefined"
-        ? `${window.location.origin}/login?oauth=google`
+        ? `${window.location.origin}/login?oauth=google${returnToParam}`
         : undefined;
 
     const { error: googleError } = await supabase.auth.signInWithOAuth({
@@ -204,8 +316,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/");
-    router.refresh();
+    redirigirDespuesDeLogin();
   }
 
   async function registrarUsuario() {
@@ -238,10 +349,20 @@ export default function LoginPage() {
 
     setCargando(true);
 
+    const emailRegistro = email.trim();
+    const destinoPostLogin = obtenerDestinoPostLogin();
+    const returnToParam =
+      destinoPostLogin !== "/" ? `&returnTo=${encodeURIComponent(destinoPostLogin)}` : "";
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/login?email_confirmed=1${returnToParam}`
+        : undefined;
+
     const { data, error: registroError } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: emailRegistro,
       password,
       options: {
+        emailRedirectTo: redirectTo,
         data: {
           nombre: nombre.trim(),
           apellidos: apellidos.trim(),
@@ -267,7 +388,7 @@ export default function LoginPage() {
             nickname: nickname.trim(),
             acepta_terminos: true,
             acepta_privacidad: true,
-            role: "usuario",
+            role: "user",
           },
           {
             onConflict: "auth_user_id",
@@ -283,8 +404,10 @@ export default function LoginPage() {
 
     setCargando(false);
     setPassword("");
+    setEmailPendienteConfirmacion(emailRegistro);
+    setTipoMensajeEspecial("registro");
     setMensaje(
-      "Registro creado. Revisa tu email para confirmar la cuenta antes de iniciar sesión."
+      `Te hemos enviado un email de confirmación a ${emailRegistro}. Revisa tu bandeja de entrada y confirma tu cuenta antes de iniciar sesión.`
     );
     setModo("login");
   }
@@ -304,7 +427,7 @@ export default function LoginPage() {
       {
         redirectTo:
           typeof window !== "undefined"
-            ? `${window.location.origin}/login`
+            ? `${window.location.origin}/login?reset=1`
             : undefined,
       }
     );
@@ -316,9 +439,12 @@ export default function LoginPage() {
       return;
     }
 
+    setTipoMensajeEspecial("reset");
     setMensaje("Te hemos enviado un email para recuperar tu contraseña.");
     setModo("login");
   }
+
+  const urlCorreo = obtenerUrlCorreo();
 
   return (
     <main className="page">
@@ -342,6 +468,49 @@ export default function LoginPage() {
           {modo === "reset" &&
             "Introduce tu email y te enviaremos un enlace para recuperar el acceso."}
         </p>
+
+        {mensaje && tipoMensajeEspecial && (
+          <div className={`heroNotice ${tipoMensajeEspecial}`}>
+            <div className="heroNoticeIcon">
+              {tipoMensajeEspecial === "registro" ? (
+                <Mail size={24} />
+              ) : (
+                <CheckCircle2 size={24} />
+              )}
+            </div>
+
+            <div className="heroNoticeContent">
+              <h2>
+                {tipoMensajeEspecial === "registro" && "Revisa tu email"}
+                {tipoMensajeEspecial === "confirmacion" && "Email confirmado"}
+                {tipoMensajeEspecial === "reset" && "Revisa tu correo"}
+                {tipoMensajeEspecial === "invitacion" && "Invitación guardada"}
+              </h2>
+
+              <p>{mensaje}</p>
+
+              {tipoMensajeEspecial === "registro" && (
+                <ul className="noticeSteps">
+                  <li>Abre el correo de confirmación.</li>
+                  <li>Pulsa el enlace para activar la cuenta.</li>
+                  <li>Vuelve aquí e inicia sesión.</li>
+                </ul>
+              )}
+
+              {tipoMensajeEspecial === "registro" && urlCorreo && (
+                <a
+                  href={urlCorreo}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mailShortcut"
+                >
+                  <Mail size={17} />
+                  Abrir mi correo
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {modo === "login" && (
           <>
@@ -497,7 +666,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {mensaje && (
+        {mensaje && !tipoMensajeEspecial && (
           <div className="notice success">
             <CheckCircle2 size={18} />
             {mensaje}
@@ -621,6 +790,90 @@ export default function LoginPage() {
           margin: 12px 0 22px;
           line-height: 1.55;
           font-weight: 650;
+        }
+
+        .heroNotice {
+          display: flex;
+          gap: 14px;
+          border-radius: 22px;
+          padding: 16px;
+          margin: 0 0 20px;
+          border: 1px solid rgba(34,197,94,0.34);
+          background:
+            radial-gradient(circle at top left, rgba(34,197,94,0.18), transparent 36%),
+            rgba(22,101,52,0.14);
+          color: #dcfce7;
+        }
+
+        .heroNotice.registro,
+        .heroNotice.invitacion {
+          border-color: rgba(96,165,250,0.34);
+          background:
+            radial-gradient(circle at top left, rgba(96,165,250,0.18), transparent 36%),
+            rgba(37,99,235,0.14);
+          color: #dbeafe;
+        }
+
+        .heroNotice.reset {
+          border-color: rgba(250,204,21,0.30);
+          background:
+            radial-gradient(circle at top left, rgba(250,204,21,0.16), transparent 36%),
+            rgba(113,63,18,0.12);
+          color: #fef3c7;
+        }
+
+        .heroNoticeIcon {
+          width: 44px;
+          height: 44px;
+          border-radius: 16px;
+          background: rgba(255,255,255,0.10);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .heroNoticeContent {
+          min-width: 0;
+        }
+
+        .heroNoticeContent h2 {
+          margin: 0;
+          color: white;
+          font-size: 21px;
+          line-height: 1.1;
+          font-weight: 950;
+          letter-spacing: -0.03em;
+        }
+
+        .heroNoticeContent p {
+          margin: 7px 0 0;
+          line-height: 1.5;
+          font-weight: 750;
+        }
+
+        .noticeSteps {
+          margin: 10px 0 0;
+          padding-left: 18px;
+          color: #bfdbfe;
+          line-height: 1.55;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .mailShortcut {
+          margin-top: 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border-radius: 14px;
+          padding: 11px 13px;
+          background: #2563eb;
+          color: white;
+          text-decoration: none;
+          font-weight: 950;
+          box-shadow: 0 14px 32px rgba(37,99,235,0.26);
         }
 
         .googleButton {
@@ -834,12 +1087,59 @@ export default function LoginPage() {
 
         @media (max-width: 760px) {
           .page {
-            padding: 28px 14px 110px;
+            padding: 24px 14px 110px;
           }
 
           .card {
             padding: 22px;
             border-radius: 26px;
+          }
+
+          .heroNotice {
+            gap: 12px;
+            padding: 14px;
+            border-radius: 20px;
+          }
+
+          .heroNoticeIcon {
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+          }
+
+          .heroNoticeContent h2 {
+            font-size: 19px;
+          }
+
+          .heroNoticeContent p {
+            font-size: 14px;
+          }
+
+          .mailShortcut {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .page {
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+
+          .card {
+            padding: 18px;
+          }
+
+          .heroNotice {
+            flex-direction: column;
+          }
+
+          h1 {
+            font-size: 40px;
+          }
+
+          .subtitle {
+            font-size: 14px;
           }
         }
       `}</style>

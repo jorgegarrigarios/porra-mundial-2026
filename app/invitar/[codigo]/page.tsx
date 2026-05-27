@@ -28,6 +28,8 @@ type Liga = {
 
 type Estado = "cargando" | "login" | "unido" | "yaDentro" | "error";
 
+const STORAGE_INVITACION = "porra_invitacion_pendiente";
+
 async function conTimeout<T>(
   operacion: PromiseLike<T>,
   ms: number,
@@ -48,13 +50,28 @@ async function conTimeout<T>(
   }
 }
 
+function normalizarCodigo(valor: string) {
+  return decodeURIComponent(valor || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+}
+
+function guardarInvitacionPendiente(codigo: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_INVITACION, codigo);
+}
+
+function limpiarInvitacionPendiente() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(STORAGE_INVITACION);
+}
+
 export default function InvitarLigaPage({ params }: Props) {
   const resolvedParams = use(params);
   const router = useRouter();
 
-  const codigoInvitacion = decodeURIComponent(resolvedParams.codigo || "")
-    .trim()
-    .toUpperCase();
+  const codigoInvitacion = normalizarCodigo(resolvedParams.codigo || "");
 
   const [estado, setEstado] = useState<Estado>("cargando");
   const [liga, setLiga] = useState<Liga | null>(null);
@@ -75,20 +92,48 @@ export default function InvitarLigaPage({ params }: Props) {
         supabase
           .from("ligas")
           .select("id, nombre, codigo")
-          .ilike("codigo", codigoInvitacion)
+          .eq("codigo", codigoInvitacion)
+          .eq("estado", "activa")
           .maybeSingle(),
         10000,
         "No se ha podido comprobar la liga."
       );
 
-      if (ligaError || !ligaData) {
+      if (ligaError) {
+        console.error("Error buscando liga por invitación:", ligaError);
         setEstado("error");
-        setMensaje("No hemos encontrado ninguna liga con este enlace.");
+        setMensaje("No se ha podido comprobar la liga. Inténtalo de nuevo.");
+        return;
+      }
+
+      if (!ligaData) {
+        setEstado("error");
+        setMensaje("No hemos encontrado ninguna liga activa con este enlace.");
         return;
       }
 
       const ligaEncontrada = ligaData as Liga;
       setLiga(ligaEncontrada);
+
+      const {
+        data: { session },
+      } = await conTimeout(
+        supabase.auth.getSession(),
+        10000,
+        "No se ha podido comprobar tu sesión."
+      );
+
+      if (!session?.user) {
+        guardarInvitacionPendiente(codigoInvitacion);
+        setEstado("login");
+        setMensaje("Te llevamos al login para que puedas unirte automáticamente a esta liga.");
+
+        window.setTimeout(() => {
+          router.replace(`/login?next=/invitar/${codigoInvitacion}`);
+        }, 750);
+
+        return;
+      }
 
       const participante = await conTimeout(
         obtenerParticipanteActual(),
@@ -97,10 +142,14 @@ export default function InvitarLigaPage({ params }: Props) {
       );
 
       if (!participante) {
+        guardarInvitacionPendiente(codigoInvitacion);
         setEstado("login");
-        setMensaje(
-          "Para unirte a esta liga necesitas iniciar sesión o crear tu cuenta."
-        );
+        setMensaje("Necesitas completar tu acceso para unirte a esta liga.");
+
+        window.setTimeout(() => {
+          router.replace(`/login?next=/invitar/${codigoInvitacion}`);
+        }, 750);
+
         return;
       }
 
@@ -118,16 +167,19 @@ export default function InvitarLigaPage({ params }: Props) {
       );
 
       if (perteneceError) {
+        console.error("Error comprobando pertenencia a liga:", perteneceError);
         setEstado("error");
         setMensaje("No se ha podido comprobar si ya perteneces a esta liga.");
         return;
       }
 
       if (yaPertenece) {
+        limpiarInvitacionPendiente();
         setEstado("yaDentro");
         setMensaje("Ya perteneces a esta liga. Te llevamos dentro.");
+        window.alert(`✅ Ya perteneces a ${ligaEncontrada.nombre}. Te llevamos a la liga.`);
 
-        setTimeout(() => {
+        window.setTimeout(() => {
           router.replace(`/ligas/${ligaEncontrada.id}`);
         }, 900);
 
@@ -146,17 +198,18 @@ export default function InvitarLigaPage({ params }: Props) {
       );
 
       if (insertError) {
+        console.error("Error uniéndose a liga por invitación:", insertError);
         setEstado("error");
-        setMensaje(
-          "No se ha podido unirte a la liga. Puede que el enlace haya caducado o que no tengas permisos."
-        );
+        setMensaje("No se ha podido unirte a la liga. Puede que ya pertenezcas a ella o que no tengas permisos.");
         return;
       }
 
+      limpiarInvitacionPendiente();
       setEstado("unido");
       setMensaje("Te has unido correctamente. Te llevamos a la liga.");
+      window.alert(`✅ Te has unido correctamente a ${ligaEncontrada.nombre}`);
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         router.replace(`/ligas/${ligaEncontrada.id}`);
       }, 1100);
     } catch (err) {
@@ -220,13 +273,13 @@ export default function InvitarLigaPage({ params }: Props) {
 
         {estado === "login" && (
           <div className="actions">
-            <Link href="/login" className="primaryButton">
+            <Link href={`/login?next=/invitar/${codigoInvitacion}`} className="primaryButton">
               Iniciar sesión
               <ArrowRight size={18} />
             </Link>
 
             <p className="helpText">
-              Después de iniciar sesión, vuelve a abrir este enlace de invitación.
+              Después del login volverás automáticamente a esta invitación.
             </p>
           </div>
         )}

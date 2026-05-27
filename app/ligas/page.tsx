@@ -80,6 +80,7 @@ export default function LigasPage() {
 
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [loadingAccion, setLoadingAccion] = useState(false);
+  const [sinSesion, setSinSesion] = useState(false);
 
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
@@ -95,9 +96,30 @@ export default function LigasPage() {
 
   async function cargar() {
     setLoadingInicial(true);
+    setSinSesion(false);
     limpiarMensajes();
 
     try {
+      const { data: sessionData, error: sessionError } = await conTimeout(
+        supabase.auth.getSession(),
+        10000,
+        "No se ha podido comprobar tu sesión."
+      );
+
+      if (sessionError) {
+        console.error("Error comprobando sesión:", sessionError);
+        setError("No se ha podido comprobar tu sesión. Inténtalo de nuevo.");
+        return;
+      }
+
+      if (!sessionData.session) {
+        setParticipante(null);
+        setMisLigas([]);
+        setLigasPendientes([]);
+        setSinSesion(true);
+        return;
+      }
+
       const participanteActual = await conTimeout(
         obtenerParticipanteActual(),
         10000,
@@ -109,7 +131,7 @@ export default function LigasPage() {
       if (!participanteActual) {
         setMisLigas([]);
         setLigasPendientes([]);
-        setError("No se ha podido cargar tu perfil. Cierra sesión y vuelve a entrar.");
+        setError("Has iniciado sesión, pero no se ha podido cargar tu perfil. Cierra sesión y vuelve a entrar.");
         return;
       }
 
@@ -178,11 +200,11 @@ export default function LigasPage() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   }
 
-  async function solicitarLiga() {
+  async function crearLiga() {
     limpiarMensajes();
 
     if (!participante) {
-      setError("Debes iniciar sesión para solicitar una liga.");
+      setError("Debes iniciar sesión para crear una liga.");
       return;
     }
 
@@ -191,35 +213,62 @@ export default function LigasPage() {
       return;
     }
 
+    if (participante.role !== "admin") {
+      setError("Solo un administrador puede crear ligas.");
+      return;
+    }
+
     setLoadingAccion(true);
 
     try {
-      const { error: insertError } = await conTimeout(
-        supabase.from("ligas").insert({
-          nombre: nombreLiga.trim(),
-          codigo: generarCodigo(),
-          creador_id: participante.id,
-          estado: "pendiente",
-        }),
+      const codigoGenerado = generarCodigo();
+
+      const { data: ligaCreada, error: insertError } = await conTimeout(
+        supabase
+          .from("ligas")
+          .insert({
+            nombre: nombreLiga.trim(),
+            codigo: codigoGenerado,
+            creador_id: participante.id,
+            estado: "activa",
+          })
+          .select("id, nombre, codigo, estado")
+          .single(),
         10000,
-        "La solicitud de liga ha tardado demasiado."
+        "La creación de la liga ha tardado demasiado."
       );
 
-      if (insertError) {
-        console.error("Error solicitando liga:", insertError);
-        setError("No se ha podido solicitar la liga. Inténtalo de nuevo.");
+      if (insertError || !ligaCreada) {
+        console.error("Error creando liga:", insertError);
+        setError("No se ha podido crear la liga. Inténtalo de nuevo.");
+        return;
+      }
+
+      const { error: relacionError } = await conTimeout(
+        supabase.from("liga_participantes").insert({
+          liga_id: ligaCreada.id,
+          participante_id: participante.id,
+        }),
+        10000,
+        "La asignación del administrador a la liga ha tardado demasiado."
+      );
+
+      if (relacionError) {
+        console.error("Error asignando admin a la liga:", relacionError);
+        setError("La liga se ha creado, pero no se ha podido asignar correctamente. Revísala desde administración.");
         return;
       }
 
       setNombreLiga("");
-      setMensaje("Solicitud enviada correctamente. Queda pendiente de aprobación.");
-      await cargar();
+      setMensaje(`Liga "${ligaCreada.nombre}" creada correctamente.`);
+      window.alert(`✅ Liga creada correctamente: ${ligaCreada.nombre}`);
+      router.push(`/ligas/${ligaCreada.id}`);
     } catch (err) {
-      console.error("Error solicitando liga:", err);
+      console.error("Error creando liga:", err);
       setError(
         err instanceof Error
           ? err.message
-          : "Ha ocurrido un error solicitando la liga."
+          : "Ha ocurrido un error creando la liga."
       );
     } finally {
       setLoadingAccion(false);
@@ -267,7 +316,8 @@ export default function LigasPage() {
       }
 
       if (misLigas.some((ligaActual) => ligaActual.id === liga.id)) {
-        setError("Ya perteneces a esta liga.");
+        window.alert(`✅ Ya perteneces a ${liga.nombre}. Te llevamos a la liga.`);
+        router.push(`/ligas/${liga.id}`);
         return;
       }
 
@@ -287,9 +337,9 @@ export default function LigasPage() {
       }
 
       setCodigoLiga("");
-      setMensaje("Te has unido correctamente a la liga.");
+      setMensaje(`Te has unido correctamente a ${liga.nombre}.`);
       window.alert(`✅ Te has unido correctamente a ${liga.nombre}`);
-      await cargar();
+      router.push(`/ligas/${liga.id}`);
     } catch (err) {
       console.error("Error uniéndose a liga:", err);
       setError(
@@ -314,6 +364,7 @@ export default function LigasPage() {
   }
 
   const tieneLigasActivas = misLigas.length > 0;
+  const esAdmin = participante?.role === "admin";
 
   return (
     <main className="ligasPage">
@@ -329,7 +380,7 @@ export default function LigasPage() {
             <p>
               {tieneLigasActivas
                 ? "Entra en tu liga y continúa haciendo tus pronósticos."
-                : "Únete con código o solicita una liga para empezar a competir."}
+                : "Únete con el código que te haya enviado el administrador para empezar a competir."}
             </p>
           </div>
         </div>
@@ -362,8 +413,34 @@ export default function LigasPage() {
           </section>
         ) : (
           <>
-            {tieneLigasActivas && (
-              <section className="continueSection">
+            {sinSesion ? (
+              <section className="authRequiredCard">
+                <div className="authRequiredIcon">
+                  <LogIn size={34} />
+                </div>
+
+                <h2>Inicia sesión para acceder a tus ligas</h2>
+
+                <p>
+                  Las ligas son privadas. Para unirte con código, ver tus competiciones
+                  o hacer tus pronósticos, primero tienes que entrar con tu cuenta.
+                </p>
+
+                <div className="authActions">
+                  <Link href="/login" className="authPrimaryButton">
+                    <LogIn size={20} />
+                    Iniciar sesión
+                  </Link>
+
+                  <Link href="/" className="authSecondaryButton">
+                    Volver al inicio
+                  </Link>
+                </div>
+              </section>
+            ) : (
+              <>
+                {tieneLigasActivas && (
+                  <section className="continueSection">
                 <div className="sectionHeader">
                   <div className="sectionTitle">
                     <Trophy size={25} />
@@ -420,14 +497,14 @@ export default function LigasPage() {
                 <Trophy size={34} />
                 <h2>Aún no estás en ninguna liga</h2>
                 <p>
-                  Lo más rápido es introducir el código que te hayan enviado. Si
-                  quieres crear una liga nueva, puedes solicitarla y quedará
-                  pendiente de aprobación.
+                  Introduce el código que te haya enviado el administrador de la
+                  liga. Cuando te unas correctamente, te llevaremos directamente
+                  dentro de la competición.
                 </p>
               </section>
             )}
 
-            <div className={`actionsGrid ${tieneLigasActivas ? "secondaryActions" : ""}`}>
+            <div className={`actionsGrid ${tieneLigasActivas ? "secondaryActions" : ""} ${!esAdmin ? "singleAction" : ""}`}>
               <section className="actionCard featuredCard">
                 <div className="cardTop">
                   <div className="smallIcon">
@@ -460,41 +537,43 @@ export default function LigasPage() {
                 </button>
               </section>
 
-              <section className="actionCard">
-                <div className="cardTop">
-                  <div className="smallIcon">
-                    <Plus size={23} />
+              {esAdmin && (
+                <section className="actionCard">
+                  <div className="cardTop">
+                    <div className="smallIcon">
+                      <Plus size={23} />
+                    </div>
+
+                    <h2>Crear liga</h2>
                   </div>
 
-                  <h2>Solicitar liga</h2>
-                </div>
+                  <p className="cardText">
+                    Solo los administradores pueden crear ligas nuevas.
+                  </p>
 
-                <p className="cardText">
-                  La liga quedará pendiente hasta que un administrador la apruebe.
-                </p>
+                  <input
+                    className="leagueInput"
+                    type="text"
+                    placeholder="Liga Familia"
+                    value={nombreLiga}
+                    onChange={(e) => setNombreLiga(e.target.value)}
+                    disabled={loadingAccion}
+                  />
 
-                <input
-                  className="leagueInput"
-                  type="text"
-                  placeholder="Liga Familia"
-                  value={nombreLiga}
-                  onChange={(e) => setNombreLiga(e.target.value)}
-                  disabled={loadingAccion}
-                />
-
-                <button
-                  type="button"
-                  className="primaryButton secondaryButton"
-                  onClick={solicitarLiga}
-                  disabled={loadingAccion}
-                >
-                  {loadingAccion ? "Procesando..." : "Solicitar liga"}
-                </button>
-              </section>
+                  <button
+                    type="button"
+                    className="primaryButton secondaryButton"
+                    onClick={crearLiga}
+                    disabled={loadingAccion}
+                  >
+                    {loadingAccion ? "Procesando..." : "Crear liga"}
+                  </button>
+                </section>
+              )}
             </div>
 
-            {ligasPendientes.length > 0 && (
-              <section className="pendingSection">
+                {ligasPendientes.length > 0 && (
+                  <section className="pendingSection">
                 <div className="sectionHeader">
                   <div className="sectionTitle">
                     <Clock3 size={24} />
@@ -521,6 +600,8 @@ export default function LigasPage() {
                   ))}
                 </div>
               </section>
+                )}
+              </>
             )}
           </>
         )}
@@ -632,6 +713,86 @@ export default function LigasPage() {
           font-family: inherit;
         }
 
+
+
+        .authRequiredCard {
+          min-height: 330px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.68));
+          border: 1px solid rgba(96,165,250,0.20);
+          border-radius: 32px;
+          padding: 34px 24px;
+          margin-bottom: 34px;
+          text-align: center;
+          box-shadow: 0 26px 80px rgba(0,0,0,0.24);
+        }
+
+        .authRequiredIcon {
+          width: 78px;
+          height: 78px;
+          border-radius: 28px;
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 22px 55px rgba(37,99,235,0.28);
+        }
+
+        .authRequiredCard h2 {
+          color: white;
+          font-size: clamp(30px, 4vw, 42px);
+          line-height: 1.05;
+          font-weight: 950;
+          margin: 0;
+          letter-spacing: -0.04em;
+        }
+
+        .authRequiredCard p {
+          max-width: 720px;
+          color: #94a3b8;
+          line-height: 1.6;
+          font-size: 17px;
+          font-weight: 750;
+          margin: 0;
+        }
+
+        .authActions {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+
+        .authPrimaryButton,
+        .authSecondaryButton {
+          min-height: 54px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          border-radius: 18px;
+          padding: 15px 22px;
+          color: white;
+          text-decoration: none;
+          font-weight: 950;
+        }
+
+        .authPrimaryButton {
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          box-shadow: 0 18px 40px rgba(37,99,235,0.24);
+        }
+
+        .authSecondaryButton {
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.12);
+        }
+
         .loadingCard,
         .emptyHero {
           min-height: 230px;
@@ -722,6 +883,11 @@ export default function LigasPage() {
 
         .secondaryActions {
           opacity: 0.92;
+        }
+
+        .singleAction {
+          grid-template-columns: minmax(0, 1fr);
+          max-width: 680px;
         }
 
         .actionCard,
@@ -1022,7 +1188,13 @@ export default function LigasPage() {
             flex-direction: column;
           }
 
-          .retryButton {
+          .retryButton,
+          .authPrimaryButton,
+          .authSecondaryButton {
+            width: 100%;
+          }
+
+          .authActions {
             width: 100%;
           }
         }
