@@ -350,7 +350,11 @@ export default function AdminBonusPage() {
       const nuevoConteo: Record<string, number> = {};
 
       ((data || []) as { seleccion: string }[]).forEach((row) => {
-        nuevoConteo[row.seleccion] = (nuevoConteo[row.seleccion] || 0) + 1;
+        const clave = normalizarTexto(row.seleccion);
+
+        if (!clave) return;
+
+        nuevoConteo[clave] = (nuevoConteo[clave] || 0) + 1;
       });
 
       setConteos(nuevoConteo);
@@ -733,8 +737,7 @@ export default function AdminBonusPage() {
     return null;
   }
 
-  const hayImportacionActiva =
-    importandoTodo || importandoTeamId !== null || importandoNombre !== null;
+  const hayImportacionActiva = importandoTodo || importandoNombre !== null;
 
   return (
     <main className="page">
@@ -995,9 +998,9 @@ export default function AdminBonusPage() {
             <section className="grid">
               {seleccionesFiltradas.map((seleccion) => {
                 const cargando =
-                  importandoNombre === seleccion.nombre ||
-                  importandoTeamId === seleccion.teamId;
-                const totalJugadores = conteos[seleccion.nombre] ?? 0;
+                  normalizarTexto(importandoNombre) === normalizarTexto(seleccion.nombre);
+                const totalJugadores =
+                  conteos[normalizarTexto(seleccion.nombre)] ?? 0;
 
                 return (
                   <article className="card" key={seleccion.nombre}>
