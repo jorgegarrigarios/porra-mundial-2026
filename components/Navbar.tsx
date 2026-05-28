@@ -13,6 +13,7 @@ import {
   LogOut,
   Shield,
   Users,
+  ScrollText,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -29,6 +30,11 @@ const links = [
   { href: "/ligas", label: "Ligas", icon: Users, public: true },
 ];
 
+type LigaNavbar = {
+  id: number;
+  liga_id?: number;
+};
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -37,11 +43,49 @@ export default function Navbar() {
   const [nombreVisible, setNombreVisible] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [alertasAdmin, setAlertasAdmin] = useState(0);
+  const [reglasHref, setReglasHref] = useState<string | null>(null);
 
   const visibleLinks = useMemo(() => {
-    return links.filter((link) => link.public || haySesion);
-  }, [haySesion]);
+    const enlaces = links.filter((link) => link.public || haySesion);
 
+    if (haySesion && reglasHref) {
+      enlaces.push({
+        href: reglasHref,
+        label: "Reglas",
+        icon: ScrollText,
+        public: false,
+      });
+    }
+
+    return enlaces;
+  }, [haySesion, reglasHref]);
+
+
+  async function cargarRutaReglasUsuario(participanteId: number) {
+    try {
+      const { data, error } = await supabase
+        .from("liga_participantes")
+        .select("liga_id")
+        .eq("participante_id", participanteId)
+        .limit(2);
+
+      if (error || !data || data.length === 0) {
+        setReglasHref(null);
+        return;
+      }
+
+      const ligas = data as LigaNavbar[];
+
+      if (ligas.length === 1 && ligas[0]?.liga_id) {
+        setReglasHref(`/ligas/${ligas[0].liga_id}/reglas`);
+        return;
+      }
+
+      setReglasHref("/ligas/gestionar");
+    } catch {
+      setReglasHref(null);
+    }
+  }
 
   async function cargarAlertasAdmin() {
     try {
@@ -89,6 +133,7 @@ export default function Navbar() {
         setNombreVisible(null);
         setIsAdmin(false);
         setAlertasAdmin(0);
+        setReglasHref(null);
         return;
       }
 
@@ -104,18 +149,21 @@ export default function Navbar() {
             obtenerNombreVisibleParticipante(participante, user.email)
           );
           setIsAdmin(participante.role === "admin");
+          await cargarRutaReglasUsuario(participante.id);
           if (participante.role === "admin") {
             await cargarAlertasAdmin();
           }
         } else {
           setNombreVisible(user.email || "Usuario");
           setIsAdmin(false);
+          setReglasHref(null);
         }
       } catch {
         if (!mounted) return;
 
         setNombreVisible(user.email || "Usuario");
         setIsAdmin(false);
+        setReglasHref(null);
       }
     }
 
@@ -129,6 +177,7 @@ export default function Navbar() {
         setHaySesion(false);
         setNombreVisible(null);
         setIsAdmin(false);
+        setReglasHref(null);
       }
     }
 
@@ -188,6 +237,7 @@ export default function Navbar() {
       setHaySesion(false);
       setNombreVisible(null);
       setIsAdmin(false);
+      setReglasHref(null);
     } finally {
       router.replace("/login");
       router.refresh();
