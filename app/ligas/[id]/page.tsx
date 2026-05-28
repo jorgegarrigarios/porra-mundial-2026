@@ -984,7 +984,7 @@ export default function LigaDetallePage({ params }: Props) {
             </div>
           </Link>
 
-          <Link href="/reglas" className="contextAction">
+          <Link href={`/ligas/${liga.id}/reglas`} className="contextAction">
             <ScrollText size={23} />
 
             <div>

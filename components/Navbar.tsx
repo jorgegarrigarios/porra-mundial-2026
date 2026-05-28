@@ -27,7 +27,6 @@ const links = [
   { href: "/mis-pronosticos", label: "Pronósticos", icon: Target, public: false },
   { href: "/clasificacion", label: "Clasificación", icon: Table2, public: true },
   { href: "/ligas", label: "Ligas", icon: Users, public: true },
-  { href: "/reglas", label: "Reglas", icon: Shield, public: false },
 ];
 
 export default function Navbar() {

@@ -355,9 +355,6 @@ export default function Home() {
             </p>
           </div>
 
-          <Link href={rutaPrivada("/reglas")} className="outlineButton compact">
-            Ver reglas
-          </Link>
         </section>
 
         <h2 className="sectionTitle">Completa tu porra</h2>
@@ -535,9 +532,6 @@ export default function Home() {
               text="Campeón, finalistas, goleador, MVP, portero, revelación y decepción."
             />
 
-            <Link href={rutaPrivada("/reglas")} className="outlineButton">
-              Ver reglas completas
-            </Link>
           </div>
         </div>
 
