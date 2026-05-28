@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 import Navbar from "@/components/Navbar";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.porrafutbol.futbol"),
@@ -86,6 +87,7 @@ export default function RootLayout({
         }}
       >
         <Navbar />
+        <PwaInstallPrompt />
 
         <main
           style={{

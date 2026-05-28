@@ -67,7 +67,7 @@ export default function Navbar() {
         .from("liga_participantes")
         .select("liga_id")
         .eq("participante_id", participanteId)
-        .limit(2);
+        .limit(1);
 
       if (error || !data || data.length === 0) {
         setReglasHref(null);
@@ -75,13 +75,14 @@ export default function Navbar() {
       }
 
       const ligas = data as LigaNavbar[];
+      const primeraLigaId = ligas[0]?.liga_id;
 
-      if (ligas.length === 1 && ligas[0]?.liga_id) {
-        setReglasHref(`/ligas/${ligas[0].liga_id}/reglas`);
+      if (!primeraLigaId) {
+        setReglasHref(null);
         return;
       }
 
-      setReglasHref("/ligas/gestionar");
+      setReglasHref(`/ligas/${primeraLigaId}/reglas`);
     } catch {
       setReglasHref(null);
     }
