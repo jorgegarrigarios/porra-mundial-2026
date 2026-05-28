@@ -338,24 +338,36 @@ export default function AdminBonusPage() {
     setCargandoConteos(true);
 
     try {
-      const { data, error: conteoError } = await supabase
-        .from("jugadores")
-        .select("seleccion")
-        .eq("activo", true);
-
-      if (conteoError) {
-        throw new Error(conteoError.message);
-      }
-
       const nuevoConteo: Record<string, number> = {};
+      const pageSize = 1000;
+      let desde = 0;
+      let seguir = true;
 
-      ((data || []) as { seleccion: string }[]).forEach((row) => {
-        const clave = normalizarTexto(row.seleccion);
+      while (seguir) {
+        const { data, error: conteoError } = await supabase
+          .from("jugadores")
+          .select("seleccion")
+          .eq("activo", true)
+          .order("seleccion", { ascending: true })
+          .range(desde, desde + pageSize - 1);
 
-        if (!clave) return;
+        if (conteoError) {
+          throw new Error(conteoError.message);
+        }
 
-        nuevoConteo[clave] = (nuevoConteo[clave] || 0) + 1;
-      });
+        const filas = (data || []) as { seleccion: string }[];
+
+        filas.forEach((row) => {
+          const clave = normalizarTexto(row.seleccion);
+
+          if (!clave) return;
+
+          nuevoConteo[clave] = (nuevoConteo[clave] || 0) + 1;
+        });
+
+        seguir = filas.length === pageSize;
+        desde += pageSize;
+      }
 
       setConteos(nuevoConteo);
     } catch (err) {
