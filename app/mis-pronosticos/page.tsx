@@ -170,6 +170,7 @@ export default function MisPronosticosPage() {
   const [filtroActivo, setFiltroActivo] = useState<Filtro>("Todos");
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
+  const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
   useEffect(() => {
@@ -508,8 +509,83 @@ export default function MisPronosticosPage() {
     }));
   }
 
+  function actualizarPronosticoGuardadoLocal(
+    partidoId: number,
+    pronosticoGuardado: Pronostico
+  ) {
+    setPronosticosGuardados((prev) => ({
+      ...prev,
+      [partidoId]: pronosticoGuardado,
+    }));
+
+    setPronosticos((prev) => ({
+      ...prev,
+      [partidoId]: {
+        local:
+          pronosticoGuardado.goles_local !== null
+            ? pronosticoGuardado.goles_local.toString()
+            : "",
+        visitante:
+          pronosticoGuardado.goles_visitante !== null
+            ? pronosticoGuardado.goles_visitante.toString()
+            : "",
+        signoGrupo: pronosticoGuardado.signo_grupo ?? "",
+        clasificadoPronosticado:
+          pronosticoGuardado.clasificado_pronosticado ?? "",
+      },
+    }));
+  }
+
+  async function guardarPayloadPronostico(
+    partidoId: number,
+    existente: Pronostico | undefined,
+    payload: {
+      participante_id: number;
+      partido_id: number;
+      goles_local: number | null;
+      goles_visitante: number | null;
+      tipo_pronostico: string;
+      signo_grupo: string | null;
+      clasificado_pronosticado: string | null;
+      puntos: number;
+    }
+  ) {
+    if (existente) {
+      const { data, error } = await supabase
+        .from("pronosticos")
+        .update(payload)
+        .eq("id", existente.id)
+        .select(
+          "id, partido_id, goles_local, goles_visitante, puntos, tipo_pronostico, signo_grupo, clasificado_pronosticado"
+        )
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data as Pronostico;
+    }
+
+    const { data, error } = await supabase
+      .from("pronosticos")
+      .insert(payload)
+      .select(
+        "id, partido_id, goles_local, goles_visitante, puntos, tipo_pronostico, signo_grupo, clasificado_pronosticado"
+      )
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data as Pronostico;
+  }
+
   async function guardarPronostico(partido: Partido) {
     if (!participante) return;
+
+    setMensajeGuardado(null);
 
     if (partidoTieneEquiposPendientes(partido)) {
       alert("Este partido estará disponible cuando se conozcan los clasificados.");
@@ -548,28 +624,14 @@ export default function MisPronosticosPage() {
           puntos: existente?.puntos ?? 0,
         };
 
-        if (existente) {
-          const { error } = await supabase
-            .from("pronosticos")
-            .update(payload)
-            .eq("id", existente.id);
+        const pronosticoGuardado = await guardarPayloadPronostico(
+          partido.id,
+          existente,
+          payload
+        );
 
-          if (error) {
-            console.error("Error actualizando pronóstico:", error.message);
-            alert("No se pudo actualizar el pronóstico.");
-            return;
-          }
-        } else {
-          const { error } = await supabase.from("pronosticos").insert(payload);
-
-          if (error) {
-            console.error("Error guardando pronóstico:", error.message);
-            alert("No se pudo guardar el pronóstico.");
-            return;
-          }
-        }
-
-        await cargarDatos();
+        actualizarPronosticoGuardadoLocal(partido.id, pronosticoGuardado);
+        setMensajeGuardado(`${partido.local} - ${partido.visitante} guardado correctamente.`);
         return;
       }
 
@@ -621,28 +683,17 @@ export default function MisPronosticosPage() {
         puntos: existente?.puntos ?? 0,
       };
 
-      if (existente) {
-        const { error } = await supabase
-          .from("pronosticos")
-          .update(payload)
-          .eq("id", existente.id);
+      const pronosticoGuardado = await guardarPayloadPronostico(
+        partido.id,
+        existente,
+        payload
+      );
 
-        if (error) {
-          console.error("Error actualizando pronóstico:", error.message);
-          alert("No se pudo actualizar el pronóstico.");
-          return;
-        }
-      } else {
-        const { error } = await supabase.from("pronosticos").insert(payload);
-
-        if (error) {
-          console.error("Error guardando pronóstico:", error.message);
-          alert("No se pudo guardar el pronóstico.");
-          return;
-        }
-      }
-
-      await cargarDatos();
+      actualizarPronosticoGuardadoLocal(partido.id, pronosticoGuardado);
+      setMensajeGuardado(`${partido.local} - ${partido.visitante} guardado correctamente.`);
+    } catch (error) {
+      console.error("Error guardando pronóstico:", error);
+      alert("No se pudo guardar el pronóstico. Inténtalo de nuevo.");
     } finally {
       setGuardandoId(null);
     }
@@ -697,6 +748,13 @@ export default function MisPronosticosPage() {
           <div className="errorBox">
             <AlertTriangle size={18} />
             <span>{errorCarga}</span>
+          </div>
+        )}
+
+        {mensajeGuardado && (
+          <div className="successBox">
+            <CheckCircle2 size={18} />
+            <span>{mensajeGuardado}</span>
           </div>
         )}
 
@@ -1293,17 +1351,27 @@ function Styles() {
         font-weight: 700;
       }
 
-      .errorBox {
+      .errorBox,
+      .successBox {
         display: flex;
         align-items: center;
         gap: 10px;
-        background: rgba(239,68,68,0.12);
-        border: 1px solid rgba(239,68,68,0.28);
-        color: #fecaca;
         border-radius: 18px;
         padding: 14px 16px;
         margin-bottom: 16px;
         font-weight: 800;
+      }
+
+      .errorBox {
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.28);
+        color: #fecaca;
+      }
+
+      .successBox {
+        background: rgba(34,197,94,0.12);
+        border: 1px solid rgba(34,197,94,0.28);
+        color: #bbf7d0;
       }
 
       .controlCenter {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  ClipboardCheck,
   CreditCard,
   Loader2,
   Shield,
@@ -14,11 +15,168 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+type AlertasAdmin = {
+  ligas: number;
+  resultados: number;
+  pagos: number;
+  pronosticos: number;
+};
+
+type LigaIdRow = {
+  id: number;
+};
+
+type LigaParticipanteSeguimientoRow = {
+  liga_id: number;
+  participante_id: number;
+};
+
+type PronosticoSeguimientoRow = {
+  participante_id: number;
+  partido_id: number;
+};
+
+type PagoSeguimientoRow = {
+  liga_id: number;
+  participante_id: number;
+  pagado: boolean;
+};
+
+async function cargarTodasLasPaginas<T>(
+  consultaBase: (desde: number, hasta: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+  tamanoPagina = 1000
+): Promise<T[]> {
+  const filas: T[] = [];
+  let desde = 0;
+
+  while (true) {
+    const hasta = desde + tamanoPagina - 1;
+    const { data, error } = await consultaBase(desde, hasta);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const pagina = data ?? [];
+    filas.push(...pagina);
+
+    if (pagina.length < tamanoPagina) {
+      break;
+    }
+
+    desde += tamanoPagina;
+  }
+
+  return filas;
+}
+
+async function cargarLigasActivasIds() {
+  const ligasActivas = await cargarTodasLasPaginas<LigaIdRow>((desde, hasta) =>
+    supabase
+      .from("ligas")
+      .select("id")
+      .eq("estado", "activa")
+      .range(desde, hasta)
+  );
+
+  return new Set(ligasActivas.map((liga) => liga.id));
+}
+
+async function cargarMiembrosLigasActivas(ligasActivasIds: Set<number>) {
+  if (ligasActivasIds.size === 0) {
+    return [];
+  }
+
+  const relaciones = await cargarTodasLasPaginas<LigaParticipanteSeguimientoRow>(
+    (desde, hasta) =>
+      supabase
+        .from("liga_participantes")
+        .select("liga_id, participante_id")
+        .range(desde, hasta)
+  );
+
+  return relaciones.filter((row) => ligasActivasIds.has(row.liga_id));
+}
+
+async function calcularUsuariosConPronosticosPendientes(
+  totalPartidos: number,
+  miembrosActivos: LigaParticipanteSeguimientoRow[]
+) {
+  if (totalPartidos <= 0 || miembrosActivos.length === 0) {
+    return 0;
+  }
+
+  const pronosticos = await cargarTodasLasPaginas<PronosticoSeguimientoRow>(
+    (desde, hasta) =>
+      supabase
+        .from("pronosticos")
+        .select("participante_id, partido_id")
+        .range(desde, hasta)
+  );
+
+  const pronosticosPorParticipante = new Map<number, Set<number>>();
+
+  pronosticos.forEach((pronostico) => {
+    if (!pronosticosPorParticipante.has(pronostico.participante_id)) {
+      pronosticosPorParticipante.set(pronostico.participante_id, new Set<number>());
+    }
+
+    pronosticosPorParticipante
+      .get(pronostico.participante_id)
+      ?.add(pronostico.partido_id);
+  });
+
+  return miembrosActivos.filter((miembro) => {
+    const completados =
+      pronosticosPorParticipante.get(miembro.participante_id)?.size ?? 0;
+
+    return completados < totalPartidos;
+  }).length;
+}
+
+async function calcularPagosPendientes(
+  ligasActivasIds: Set<number>,
+  miembrosActivos: LigaParticipanteSeguimientoRow[]
+) {
+  if (ligasActivasIds.size === 0 || miembrosActivos.length === 0) {
+    return 0;
+  }
+
+  const pagos = await cargarTodasLasPaginas<PagoSeguimientoRow>((desde, hasta) =>
+    supabase
+      .from("liga_pagos")
+      .select("liga_id, participante_id, pagado")
+      .range(desde, hasta)
+  );
+
+  const pagosConfirmados = new Set<string>();
+
+  pagos.forEach((pago) => {
+    if (!ligasActivasIds.has(pago.liga_id)) return;
+    if (!pago.pagado) return;
+
+    pagosConfirmados.add(`${pago.liga_id}:${pago.participante_id}`);
+  });
+
+  return miembrosActivos.filter((miembro) => {
+    const clave = `${miembro.liga_id}:${miembro.participante_id}`;
+    return !pagosConfirmados.has(clave);
+  }).length;
+}
+
 export default function AdminHomePage() {
   const router = useRouter();
   const [cargando, setCargando] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
-  const [alertas, setAlertas] = useState({ ligas:0, resultados:0, pagos:0 });
+  const [alertas, setAlertas] = useState<AlertasAdmin>({
+    ligas: 0,
+    resultados: 0,
+    pagos: 0,
+    pronosticos: 0,
+  });
 
   useEffect(() => {
     let activo = true;
@@ -50,19 +208,51 @@ export default function AdminHomePage() {
         return;
       }
 
-      const ahora = new Date().toISOString();
+      try {
+        const ahora = new Date().toISOString();
 
-      const [ligasPend, partidosPend, pagosPend] = await Promise.all([
-        supabase.from("ligas").select("*",{count:"exact", head:true}).eq("estado","pendiente"),
-        supabase.from("partidos").select("*",{count:"exact", head:true}).lte("fecha_inicio", ahora).is("resultado_local", null),
-        supabase.from("liga_pagos").select("*",{count:"exact", head:true}).eq("pagado", false),
-      ]);
+        const [ligasPend, partidosPend, totalPartidosResult, ligasActivasIds] =
+          await Promise.all([
+            supabase
+              .from("ligas")
+              .select("*", { count: "exact", head: true })
+              .eq("estado", "pendiente"),
+            supabase
+              .from("partidos")
+              .select("*", { count: "exact", head: true })
+              .lte("fecha_inicio", ahora)
+              .is("resultado_local", null),
+            supabase.from("partidos").select("*", { count: "exact", head: true }),
+            cargarLigasActivasIds(),
+          ]);
 
-      setAlertas({
-        ligas: ligasPend.count ?? 0,
-        resultados: partidosPend.count ?? 0,
-        pagos: pagosPend.count ?? 0,
-      });
+        const miembrosActivos = await cargarMiembrosLigasActivas(ligasActivasIds);
+
+        const totalPartidos = totalPartidosResult.count ?? 0;
+
+        const [pagosPendientes, pronosticosPendientes] = await Promise.all([
+          calcularPagosPendientes(ligasActivasIds, miembrosActivos),
+          calcularUsuariosConPronosticosPendientes(totalPartidos, miembrosActivos),
+        ]);
+
+        if (!activo) return;
+
+        setAlertas({
+          ligas: ligasPend.count ?? 0,
+          resultados: partidosPend.count ?? 0,
+          pagos: pagosPendientes,
+          pronosticos: pronosticosPendientes,
+        });
+      } catch {
+        if (!activo) return;
+
+        setAlertas({
+          ligas: 0,
+          resultados: 0,
+          pagos: 0,
+          pronosticos: 0,
+        });
+      }
 
       setAutorizado(true);
       setCargando(false);
@@ -105,6 +295,12 @@ export default function AdminHomePage() {
       desc: "Controla quién ha pagado la inscripción de cada liga.",
       href: "/admin/pagos",
       icon: CreditCard,
+    },
+    {
+      title: "Seguimiento pronósticos",
+      desc: "Revisa qué usuarios tienen el 100% de pronósticos completados.",
+      href: "/admin/seguimiento-pronosticos",
+      icon: ClipboardCheck,
     },
   ];
 
@@ -173,13 +369,27 @@ export default function AdminHomePage() {
             </div>
 
             <div className="alertItem">
-              <strong>{alertas.resultados}</strong>
-              <span>Resultados pendientes</span>
+              {alertas.resultados > 0 ? (
+              <>
+                <strong>{alertas.resultados}</strong>
+                <span>Partidos sin resultado oficial</span>
+              </>
+            ) : (
+              <>
+                <strong>✓</strong>
+                <span>Resultados al día</span>
+              </>
+            )}
             </div>
 
             <div className="alertItem">
               <strong>{alertas.pagos}</strong>
               <span>Pagos pendientes</span>
+            </div>
+
+            <div className="alertItem">
+              <strong>{alertas.pronosticos}</strong>
+              <span>Usuarios con pronósticos pendientes</span>
             </div>
           </div>
         </div>
@@ -248,7 +458,6 @@ export default function AdminHomePage() {
           font-weight:700;
         }
 
-        
         .alertPanel{
           margin-bottom:26px;
           background:linear-gradient(145deg,rgba(127,29,29,.45),rgba(15,23,42,.95));
@@ -265,7 +474,7 @@ export default function AdminHomePage() {
 
         .alertGrid{
           display:grid;
-          grid-template-columns:repeat(3,minmax(0,1fr));
+          grid-template-columns:repeat(4,minmax(0,1fr));
           gap:14px;
         }
 
@@ -289,9 +498,9 @@ export default function AdminHomePage() {
           font-weight:800;
         }
 
-.grid{
+        .grid{
           display:grid;
-          grid-template-columns:repeat(5,minmax(0,1fr));
+          grid-template-columns:repeat(3,minmax(0,1fr));
           gap:18px;
         }
 
@@ -346,6 +555,10 @@ export default function AdminHomePage() {
         }
 
         @media(max-width:1180px){
+          .alertGrid{
+            grid-template-columns:repeat(2,minmax(0,1fr));
+          }
+
           .grid{
             grid-template-columns:repeat(2,minmax(0,1fr));
           }

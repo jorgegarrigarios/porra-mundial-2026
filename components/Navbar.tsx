@@ -88,11 +88,12 @@ export default function Navbar() {
     }
   }
 
+  
   async function cargarAlertasAdmin() {
     try {
       const ahora = new Date().toISOString();
 
-      const [ligasPendientes, partidosPendientes, pagosPendientes] =
+      const [ligasPendientes, partidosPendientes, ligasActivasRes, relacionesRes, pagosRes] =
         await Promise.all([
           supabase
             .from("ligas")
@@ -104,20 +105,50 @@ export default function Navbar() {
             .lte("fecha_inicio", ahora)
             .is("resultado_local", null),
           supabase
+            .from("ligas")
+            .select("id")
+            .eq("estado", "activa"),
+          supabase
+            .from("liga_participantes")
+            .select("liga_id, participante_id"),
+          supabase
             .from("liga_pagos")
-            .select("*", { count: "exact", head: true })
-            .eq("pagado", false),
+            .select("liga_id, participante_id, pagado"),
         ]);
 
-      setAlertasAdmin(
-        (ligasPendientes.count ?? 0) +
-          (partidosPendientes.count ?? 0) +
-          (pagosPendientes.count ?? 0)
+      const ligasActivasIds = new Set(
+        (ligasActivasRes.data ?? []).map((liga) => liga.id)
       );
+
+      const miembrosActivos = (relacionesRes.data ?? []).filter((row) =>
+        ligasActivasIds.has(row.liga_id)
+      );
+
+      const pagosConfirmados = new Set<string>();
+
+      (pagosRes.data ?? []).forEach((pago) => {
+        if (!ligasActivasIds.has(pago.liga_id)) return;
+        if (!pago.pagado) return;
+
+        pagosConfirmados.add(`${pago.liga_id}:${pago.participante_id}`);
+      });
+
+      const pagosPendientesReales = miembrosActivos.filter((miembro) => {
+        const clave = `${miembro.liga_id}:${miembro.participante_id}`;
+        return !pagosConfirmados.has(clave);
+      }).length;
+
+      const totalAlertas =
+        (ligasPendientes.count ?? 0) +
+        (partidosPendientes.count ?? 0) +
+        pagosPendientesReales;
+
+      setAlertasAdmin(totalAlertas);
     } catch {
       setAlertasAdmin(0);
     }
   }
+
 
   useEffect(() => {
     let mounted = true;
