@@ -184,9 +184,24 @@ function contarBonusCompletados(bonus: PronosticoBonusRow | undefined) {
   ].filter((valor) => valor && valor.trim().length > 0).length;
 }
 
+function usuarioTieneAlgoHecho(usuario: SeguimientoUsuario) {
+  return (
+    usuario.partidosTotal.completados > 0 ||
+    usuario.bonus.completados > 0 ||
+    usuario.grupos.completados > 0 ||
+    usuario.fases.some((fase) => fase.completados > 0)
+  );
+}
+
 function estadoGlobal(usuario: SeguimientoUsuario) {
-  if (usuario.global.porcentaje >= 100) return "Completo";
-  if (usuario.global.porcentaje <= 0) return "Sin empezar";
+  if (usuario.global.total > 0 && usuario.global.completados >= usuario.global.total) {
+    return "Completo";
+  }
+
+  if (!usuarioTieneAlgoHecho(usuario)) {
+    return "Sin empezar";
+  }
+
   return "Pendiente";
 }
 
@@ -239,8 +254,18 @@ export default function AdminSeguimientoPronosticosPage() {
     return usuarios
       .filter((usuario) => (ligaSeleccionadaId === "todas" ? true : usuario.ligaId === ligaSeleccionadaId))
       .filter((usuario) => {
-        if (estadoFiltro === "pendientes") return usuario.global.porcentaje < 100;
-        if (estadoFiltro === "completos") return usuario.global.porcentaje >= 100;
+        if (estadoFiltro === "pendientes") {
+          return !(
+            usuario.global.total > 0 &&
+            usuario.global.completados >= usuario.global.total
+          );
+        }
+        if (estadoFiltro === "completos") {
+          return (
+            usuario.global.total > 0 &&
+            usuario.global.completados >= usuario.global.total
+          );
+        }
         return true;
       })
       .filter((usuario) => {
@@ -255,8 +280,18 @@ export default function AdminSeguimientoPronosticosPage() {
 
   const resumen = useMemo(() => {
     const totalUsuarios = usuariosFiltrados.length;
-    const completos = usuariosFiltrados.filter((usuario) => usuario.global.porcentaje >= 100).length;
-    const pendientes = usuariosFiltrados.filter((usuario) => usuario.global.porcentaje < 100).length;
+    const completos = usuariosFiltrados.filter(
+      (usuario) =>
+        usuario.global.total > 0 &&
+        usuario.global.completados >= usuario.global.total
+    ).length;
+    const pendientes = usuariosFiltrados.filter(
+      (usuario) =>
+        !(
+          usuario.global.total > 0 &&
+          usuario.global.completados >= usuario.global.total
+        )
+    ).length;
     const partidosPendientes = usuariosFiltrados.filter((usuario) => usuario.partidosTotal.porcentaje < 100).length;
     const bonusPendientes = usuariosFiltrados.filter((usuario) => usuario.bonus.porcentaje < 100).length;
     const gruposPendientes = usuariosFiltrados.filter((usuario) => usuario.grupos.porcentaje < 100).length;
@@ -438,7 +473,7 @@ export default function AdminSeguimientoPronosticosPage() {
           <article className="summaryCard"><span>Usuarios visibles</span><strong>{resumen.totalUsuarios}</strong></article>
           <article className="summaryCard paid"><span>100% completo</span><strong>{resumen.completos}</strong></article>
           <article className="summaryCard pending"><span>Global pendientes</span><strong>{resumen.pendientes}</strong></article>
-          <article className="summaryCard partidos"><span>Partidos pendientes</span><strong>{resumen.partidosPendientes}</strong></article>
+          <article className="summaryCard partidos"><span>Partidos disponibles pendientes</span><strong>{resumen.partidosPendientes}</strong></article>
           <article className="summaryCard bonus"><span>Bonus pendientes</span><strong>{resumen.bonusPendientes}</strong></article>
           <article className="summaryCard grupos"><span>Grupos pendientes</span><strong>{resumen.gruposPendientes}</strong></article>
           <article className="summaryCard average"><span>Media global</span><strong>{resumen.media}%</strong></article>
@@ -460,11 +495,13 @@ export default function AdminSeguimientoPronosticosPage() {
           ) : (
             <div className="tableScroller">
               <table className="trackingTable">
-                <thead><tr><th>Usuario</th><th>Liga</th><th>Global</th><th>Partidos total</th>{fasesDisponibles.map((fase) => <th key={fase}>{fase}</th>)}<th>Bonus</th><th>Clasificados grupo</th><th>Estado</th></tr></thead>
+                <thead><tr><th>Usuario</th><th>Liga</th><th>Global</th><th>Partidos disponibles</th>{fasesDisponibles.map((fase) => <th key={fase}>{fase}</th>)}<th>Bonus</th><th>Clasificados grupo</th><th>Estado</th></tr></thead>
                 <tbody>
                   {usuariosFiltrados.map((usuario) => {
-                    const completo = usuario.global.porcentaje >= 100;
-                    const sinEmpezar = usuario.global.porcentaje <= 0;
+                    const completo =
+                      usuario.global.total > 0 &&
+                      usuario.global.completados >= usuario.global.total;
+                    const sinEmpezar = !usuarioTieneAlgoHecho(usuario);
                     return (
                       <tr key={`${usuario.ligaId}-${usuario.participante.id}`}>
                         <td className="stickyUser"><div className="userCell"><div className={`statusDot ${completo ? "ok" : sinEmpezar ? "zero" : "pending"}`}>{completo ? <CheckCircle2 size={17} /> : sinEmpezar ? <XCircle size={17} /> : <AlertTriangle size={17} />}</div><div><strong>{nombreVisible(usuario.participante)}</strong><span>ID {usuario.participante.id}</span></div></div></td>
