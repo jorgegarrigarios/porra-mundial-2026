@@ -476,7 +476,7 @@ export default function PartidosPage() {
         {!cargando && !errorCarga && partidos.length > 0 && (
           <section className="quickStats">
             <div>
-              <span>Total partidos</span>
+              <span>Total</span>
               <strong>{partidos.length}</strong>
             </div>
             <div>
@@ -488,11 +488,11 @@ export default function PartidosPage() {
               <strong>{totalFinalizados}</strong>
             </div>
             <div>
-              <span>Tus pronósticos</span>
+              <span>Tus picks</span>
               <strong>{participante ? totalPronosticados : "-"}</strong>
             </div>
             <div>
-              <span>Equipos pendientes</span>
+              <span>Equipos pend.</span>
               <strong>{totalPendientesEquipos}</strong>
             </div>
           </section>
@@ -893,6 +893,7 @@ export default function PartidosPage() {
         }
 
         .quickStats div {
+          min-width: 0;
           border-radius: 18px;
           padding: 14px;
           background: rgba(15,23,42,0.72);
@@ -902,18 +903,20 @@ export default function PartidosPage() {
         .quickStats span {
           display: block;
           color: #94a3b8;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 950;
-          letter-spacing: .08em;
+          letter-spacing: .06em;
           text-transform: uppercase;
-          margin-bottom: 5px;
+          margin-bottom: 6px;
+          white-space: nowrap;
         }
 
         .quickStats strong {
           display: block;
-          font-size: 24px;
+          font-size: 25px;
           line-height: 1;
           font-weight: 950;
+          letter-spacing: -0.04em;
         }
 
         .errorBox {
@@ -1424,6 +1427,7 @@ export default function PartidosPage() {
         }
 
         .quickStats div {
+          min-width: 0;
           border-radius: 18px;
           padding: 14px;
           background: rgba(15,23,42,0.72);
@@ -1433,18 +1437,20 @@ export default function PartidosPage() {
         .quickStats span {
           display: block;
           color: #94a3b8;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 950;
-          letter-spacing: .08em;
+          letter-spacing: .06em;
           text-transform: uppercase;
-          margin-bottom: 5px;
+          margin-bottom: 6px;
+          white-space: nowrap;
         }
 
         .quickStats strong {
           display: block;
-          font-size: 24px;
+          font-size: 25px;
           line-height: 1;
           font-weight: 950;
+          letter-spacing: -0.04em;
         }
 
         .errorBox {
@@ -1453,6 +1459,19 @@ export default function PartidosPage() {
 
           .errorBox button {
             justify-content: center;
+          }
+
+          .dateNav {
+            position: sticky;
+            top: calc(72px + env(safe-area-inset-top));
+            z-index: 20;
+            background: linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72));
+            backdrop-filter: blur(10px);
+            padding-top: 8px;
+            margin-left: -12px;
+            margin-right: -12px;
+            padding-left: 12px;
+            padding-right: 12px;
           }
 
           .dateSection h2 {

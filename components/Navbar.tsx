@@ -394,6 +394,8 @@ export default function Navbar() {
         </div>
       </header>
 
+      <div className="mobileHeaderSpacer" />
+
       <nav
         className="mobileNav"
         style={{
@@ -596,6 +598,7 @@ export default function Navbar() {
         }
 
         .mobileHeader,
+        .mobileHeaderSpacer,
         .mobileNav {
           display: none;
         }
@@ -641,9 +644,11 @@ export default function Navbar() {
           }
 
           .mobileHeader {
-            position: sticky;
+            position: fixed;
             top: 0;
-            z-index: 100;
+            left: 0;
+            right: 0;
+            z-index: 1000;
             min-height: 72px;
             display: flex;
             align-items: center;
@@ -654,6 +659,13 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             border-bottom: 1px solid rgba(255,255,255,0.10);
             box-sizing: border-box;
+            transform: translateZ(0);
+            will-change: transform;
+          }
+
+          .mobileHeaderSpacer {
+            display: block;
+            height: calc(72px + env(safe-area-inset-top));
           }
 
           .mobileBrand {
@@ -731,7 +743,7 @@ export default function Navbar() {
             left: 12px;
             right: 12px;
             bottom: calc(12px + env(safe-area-inset-bottom));
-            z-index: 100;
+            z-index: 1000;
             display: grid;
             gap: 6px;
             padding: 9px;
@@ -740,6 +752,9 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             border: 1px solid rgba(255,255,255,0.12);
             box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+            transform: translateZ(0);
+            will-change: transform;
+            contain: layout paint;
           }
 
           .mobileLink {
@@ -773,7 +788,8 @@ export default function Navbar() {
           }
 
           body {
-            padding-bottom: calc(104px + env(safe-area-inset-bottom));
+            padding-top: 0;
+            padding-bottom: calc(118px + env(safe-area-inset-bottom));
           }
         }
 
