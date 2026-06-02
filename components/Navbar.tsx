@@ -648,7 +648,7 @@ export default function Navbar() {
             top: 0;
             left: 0;
             right: 0;
-            z-index: 1000;
+            z-index: 5000;
             min-height: 72px;
             display: flex;
             align-items: center;
@@ -659,8 +659,8 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             border-bottom: 1px solid rgba(255,255,255,0.10);
             box-sizing: border-box;
-            transform: translateZ(0);
-            will-change: transform;
+            transform: translate3d(0,0,0);
+            backface-visibility: hidden;
           }
 
           .mobileHeaderSpacer {
@@ -740,10 +740,10 @@ export default function Navbar() {
 
           .mobileNav {
             position: fixed;
-            left: 12px;
-            right: 12px;
-            bottom: calc(12px + env(safe-area-inset-bottom));
-            z-index: 1000;
+            left: 10px;
+            right: 10px;
+            bottom: calc(10px + env(safe-area-inset-bottom));
+            z-index: 5000;
             display: grid;
             gap: 6px;
             padding: 9px;
@@ -752,9 +752,9 @@ export default function Navbar() {
             backdrop-filter: blur(18px);
             border: 1px solid rgba(255,255,255,0.12);
             box-shadow: 0 20px 60px rgba(0,0,0,0.45);
-            transform: translateZ(0);
+            transform: translate3d(0,0,0);
+            backface-visibility: hidden;
             will-change: transform;
-            contain: layout paint;
           }
 
           .mobileLink {
@@ -787,8 +787,13 @@ export default function Navbar() {
             box-shadow: 0 0 22px rgba(37,99,235,0.55);
           }
 
+          html,
           body {
-            padding-top: 0;
+            max-width: 100%;
+            overflow-x: hidden;
+          }
+
+          body {
             padding-bottom: calc(118px + env(safe-area-inset-bottom));
           }
         }

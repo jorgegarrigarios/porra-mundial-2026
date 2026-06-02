@@ -450,9 +450,7 @@ export default function PartidosPage() {
                 </div>
 
                 {proximoPartido.tv && (
-                  <div className="tvBadge">
-                    📺 {proximoPartido.tv}
-                  </div>
+                  <div className="tvBadge">📺 {proximoPartido.tv}</div>
                 )}
               </div>
 
@@ -656,9 +654,7 @@ export default function PartidosPage() {
                             </span>
 
                             {partido.tv && (
-                              <span className="tvBadge">
-                                📺 {partido.tv}
-                              </span>
+                              <span className="tvBadge">📺 {partido.tv}</span>
                             )}
                           </div>
 
@@ -854,13 +850,6 @@ export default function PartidosPage() {
           margin-top: 18px;
         }
 
-        .nextMetaWrap {
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-          align-items:center;
-        }
-
         .nextMeta {
           display: inline-flex;
           align-items: center;
@@ -893,7 +882,6 @@ export default function PartidosPage() {
         }
 
         .quickStats div {
-          min-width: 0;
           border-radius: 18px;
           padding: 14px;
           background: rgba(15,23,42,0.72);
@@ -903,20 +891,18 @@ export default function PartidosPage() {
         .quickStats span {
           display: block;
           color: #94a3b8;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 950;
-          letter-spacing: .06em;
+          letter-spacing: .08em;
           text-transform: uppercase;
-          margin-bottom: 6px;
-          white-space: nowrap;
+          margin-bottom: 5px;
         }
 
         .quickStats strong {
           display: block;
-          font-size: 25px;
+          font-size: 24px;
           line-height: 1;
           font-weight: 950;
-          letter-spacing: -0.04em;
         }
 
         .errorBox {
@@ -1215,37 +1201,11 @@ export default function PartidosPage() {
           font-size: 14px;
         }
 
-        .metaRow {
-          margin-top: 16px;
-          color: #94a3b8;
-          font-size: 14px;
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-        }
-
         .metaRow span {
           display: inline-flex;
           align-items: center;
           gap: 6px;
         }
-
-        
-        .tvBadge {
-          display:inline-flex;
-          align-items:center;
-          gap:7px;
-          border-radius:999px;
-          padding:8px 12px;
-          background:linear-gradient(135deg, rgba(37,99,235,0.20), rgba(124,58,237,0.16));
-          border:1px solid rgba(147,197,253,0.30);
-          color:#dbeafe;
-          font-size:13px;
-          font-weight:950;
-          white-space:nowrap;
-          box-shadow:0 10px 26px rgba(37,99,235,0.12);
-        }
-
 
         .bottomRow {
           margin-top: 16px;
@@ -1283,9 +1243,50 @@ export default function PartidosPage() {
           color: #bfdbfe;
         }
 
+
+
+        .nextMetaWrap {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .quickStats div {
+          min-width: 0;
+        }
+
+        .quickStats span {
+          font-size: 10px;
+          letter-spacing: .06em;
+          white-space: nowrap;
+        }
+
+        .quickStats strong {
+          letter-spacing: -0.04em;
+        }
+
+        .tvBadge {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          width: fit-content;
+          max-width: 100%;
+          border-radius: 999px;
+          padding: 8px 12px;
+          background: linear-gradient(135deg, rgba(37,99,235,0.20), rgba(124,58,237,0.16));
+          border: 1px solid rgba(147,197,253,0.30);
+          color: #dbeafe;
+          font-size: 13px;
+          font-weight: 950;
+          white-space: nowrap;
+          box-shadow: 0 10px 26px rgba(37,99,235,0.12);
+        }
+
         @media (max-width: 760px) {
           .partidosPage {
-            padding: 22px 12px 120px;
+            padding: 22px 12px 138px;
+            overflow-x: hidden;
           }
 
           .header h1 {
@@ -1316,6 +1317,77 @@ export default function PartidosPage() {
             flex: 0 0 auto;
             padding: 9px 12px;
             font-size: 13px;
+          }
+
+          .nextMatchCard {
+            padding: 18px;
+            border-radius: 26px;
+          }
+
+          .nextMatchMain {
+            grid-template-columns: 1fr;
+            text-align: center;
+          }
+
+          .nextCenter {
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 14px;
+          }
+
+          .nextMatchFooter {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .nextMetaWrap {
+            display: grid;
+            grid-template-columns: 1fr;
+            width: 100%;
+          }
+
+          .nextButton {
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .quickStats {
+            display: flex;
+            overflow-x: auto;
+            gap: 10px;
+            padding-bottom: 6px;
+            margin-left: -2px;
+            margin-right: -2px;
+            scrollbar-width: none;
+            scroll-snap-type: x mandatory;
+          }
+
+          .quickStats::-webkit-scrollbar {
+            display: none;
+          }
+
+          .quickStats div {
+            flex: 0 0 148px;
+            padding: 13px 14px;
+            scroll-snap-align: start;
+          }
+
+          .quickStats strong {
+            font-size: 28px;
+          }
+
+          .dateNav {
+            position: sticky;
+            top: calc(72px + env(safe-area-inset-top));
+            z-index: 20;
+            background: linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.74));
+            backdrop-filter: blur(12px);
+            padding-top: 8px;
+            margin-left: -12px;
+            margin-right: -12px;
+            padding-left: 12px;
+            padding-right: 12px;
           }
 
   
@@ -1388,13 +1460,6 @@ export default function PartidosPage() {
           margin-top: 18px;
         }
 
-        .nextMetaWrap {
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-          align-items:center;
-        }
-
         .nextMeta {
           display: inline-flex;
           align-items: center;
@@ -1427,7 +1492,6 @@ export default function PartidosPage() {
         }
 
         .quickStats div {
-          min-width: 0;
           border-radius: 18px;
           padding: 14px;
           background: rgba(15,23,42,0.72);
@@ -1437,20 +1501,18 @@ export default function PartidosPage() {
         .quickStats span {
           display: block;
           color: #94a3b8;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 950;
-          letter-spacing: .06em;
+          letter-spacing: .08em;
           text-transform: uppercase;
-          margin-bottom: 6px;
-          white-space: nowrap;
+          margin-bottom: 5px;
         }
 
         .quickStats strong {
           display: block;
-          font-size: 25px;
+          font-size: 24px;
           line-height: 1;
           font-weight: 950;
-          letter-spacing: -0.04em;
         }
 
         .errorBox {
@@ -1459,19 +1521,6 @@ export default function PartidosPage() {
 
           .errorBox button {
             justify-content: center;
-          }
-
-          .dateNav {
-            position: sticky;
-            top: calc(72px + env(safe-area-inset-top));
-            z-index: 20;
-            background: linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,0.72));
-            backdrop-filter: blur(10px);
-            padding-top: 8px;
-            margin-left: -12px;
-            margin-right: -12px;
-            padding-left: 12px;
-            padding-right: 12px;
           }
 
           .dateSection h2 {
@@ -1489,35 +1538,13 @@ export default function PartidosPage() {
             text-align: center;
           }
 
-          
-        .tvBadge {
-          display:inline-flex;
-          align-items:center;
-          gap:7px;
-          border-radius:999px;
-          padding:8px 12px;
-          background:linear-gradient(135deg, rgba(37,99,235,0.20), rgba(124,58,237,0.16));
-          border:1px solid rgba(147,197,253,0.30);
-          color:#dbeafe;
-          font-size:13px;
-          font-weight:950;
-          white-space:nowrap;
-          box-shadow:0 10px 26px rgba(37,99,235,0.12);
-        }
-
-
-        .bottomRow {
+          .bottomRow {
             flex-direction: column;
           }
 
           .detailButton,
           .pronosticoButton {
             width: 100%;
-          }
-
-          .tvBadge {
-            width: fit-content;
-            max-width: 100%;
           }
         }
       `}</style>

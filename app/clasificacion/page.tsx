@@ -47,6 +47,7 @@ export default function ClasificacionPage() {
       <style>{`
         .clasificacionPage {
           min-height: 100vh;
+          overflow-x: hidden;
           background: linear-gradient(180deg, #020617 0%, #111827 100%);
           color: white;
           padding: 32px 16px 110px;
@@ -54,7 +55,9 @@ export default function ClasificacionPage() {
 
         .container {
           max-width: 1180px;
+          width: 100%;
           margin: 0 auto;
+          box-sizing: border-box;
         }
 
         .header {
@@ -147,6 +150,10 @@ export default function ClasificacionPage() {
         .teams {
           display: grid;
           gap: 10px;
+          width: 100%;
+          overflow-x: auto;
+          padding-bottom: 2px;
+          scrollbar-width: thin;
         }
 
         .tableHeader,
@@ -666,6 +673,105 @@ export default function ClasificacionPage() {
             padding: 18px;
           }
         }
+
+
+        @media (max-width: 640px) {
+          .clasificacionPage {
+            padding: 22px 12px 138px;
+            overflow-x: hidden;
+          }
+
+          .container,
+          .header,
+          .tabs,
+          .groupsGrid,
+          .thirdsPanel,
+          .bracketIntro,
+          .bracketScroll {
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+
+          .header h1 {
+            font-size: 34px;
+          }
+
+          .tabs {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .tab {
+            justify-content: center;
+            padding: 11px 10px;
+            font-size: 13px;
+          }
+
+          .groupsGrid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+
+          .groupCard,
+          .roundColumn,
+          .thirdsPanel,
+          .rulesPanel,
+          .bracketIntro {
+            padding: 16px;
+            border-radius: 22px;
+          }
+
+          .tableHeader,
+          .teamRow {
+            grid-template-columns: 30px minmax(140px, 1fr) repeat(6, 34px);
+            min-width: 430px;
+          }
+
+          .teamRow {
+            padding: 10px;
+          }
+
+          .teamName {
+            font-size: 13px;
+          }
+
+          .teamStatus {
+            font-size: 10px;
+          }
+
+          .stat,
+          .status {
+            font-size: 12px;
+          }
+
+          .thirdsHeader {
+            grid-template-columns: 1fr;
+          }
+
+          .thirdsGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .thirdCard {
+            grid-template-columns: auto auto 1fr;
+          }
+
+          .thirdStatus {
+            grid-column: 3;
+            width: fit-content;
+          }
+
+          .bracketScroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .bracket {
+            min-width: 820px;
+          }
+        }
+
       `}</style>
     </main>
   );
