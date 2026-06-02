@@ -275,11 +275,19 @@ export default function PartidoDetallePage() {
             <Team code={partido.visitante_code} name={partido.visitante} />
           </div>
 
-          <div className="stadium">
-            <MapPin size={18} />
-            {partido.estadio ?? "Estadio pendiente"}
-            {partido.ciudad ? ` · ${partido.ciudad}` : ""}
-            {partido.pais ? ` · ${partido.pais}` : ""}
+          <div className="stadiumWrap">
+            <div className="stadium">
+              <MapPin size={18} />
+              {partido.estadio ?? "Estadio pendiente"}
+              {partido.ciudad ? ` · ${partido.ciudad}` : ""}
+              {partido.pais ? ` · ${partido.pais}` : ""}
+            </div>
+
+            {partido.tv && (
+              <div className="tvHeroBadge">
+                📺 Ver en España: {partido.tv}
+              </div>
+            )}
           </div>
 
           {!partidoEmpezado && (
@@ -331,7 +339,6 @@ export default function PartidoDetallePage() {
             />
             <InfoRow label="Estadio" value={partido.estadio ?? "Pendiente"} />
             <InfoRow label="Ciudad" value={partido.ciudad ?? "Pendiente"} />
-            <InfoRow label="TV" value={partido.tv ?? "Pendiente"} />
           </section>
         </div>
 
@@ -586,6 +593,14 @@ function Styles() {
         margin-top: 6px;
       }
 
+      .stadiumWrap {
+        margin-top:28px;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:12px;
+      }
+
       .stadium {
         margin-top: 28px;
         display: flex;
@@ -596,6 +611,23 @@ function Styles() {
         font-weight: 800;
         flex-wrap: wrap;
       }
+
+      
+      .tvHeroBadge {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:9px;
+        border-radius:999px;
+        padding:12px 18px;
+        background:linear-gradient(135deg, rgba(37,99,235,0.22), rgba(124,58,237,0.18));
+        border:1px solid rgba(147,197,253,0.32);
+        color:#dbeafe;
+        font-weight:950;
+        box-shadow:0 14px 34px rgba(37,99,235,0.14);
+        text-align:center;
+      }
+
 
       .primaryButton {
         margin: 28px auto 0;
@@ -799,6 +831,12 @@ function Styles() {
 
         .score {
           font-size: 44px;
+        }
+
+        .tvHeroBadge {
+          width: 100%;
+          box-sizing: border-box;
+          border-radius: 18px;
         }
 
         .predictionRow {

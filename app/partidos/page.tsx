@@ -38,6 +38,7 @@ type Partido = {
   fase: string | null;
   resultado_local: number | null;
   resultado_visitante: number | null;
+  tv: string | null;
 };
 
 type Participante = {
@@ -109,7 +110,7 @@ export default function PartidosPage() {
         supabase
           .from("partidos")
           .select(
-            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase, resultado_local, resultado_visitante"
+            "id, local, visitante, local_code, visitante_code, fecha_inicio, estadio, ciudad, grupo, fase, resultado_local, resultado_visitante, tv"
           )
           .order("fecha_inicio", { ascending: true, nullsFirst: false }),
         queryTimeout<Partido[]>(),
@@ -441,10 +442,18 @@ export default function PartidosPage() {
             </div>
 
             <div className="nextMatchFooter">
-              <div className="nextMeta">
-                <MapPin size={14} />
-                {proximoPartido.estadio ?? "Estadio pendiente"}
-                {proximoPartido.ciudad ? ` · ${proximoPartido.ciudad}` : ""}
+              <div className="nextMetaWrap">
+                <div className="nextMeta">
+                  <MapPin size={14} />
+                  {proximoPartido.estadio ?? "Estadio pendiente"}
+                  {proximoPartido.ciudad ? ` · ${proximoPartido.ciudad}` : ""}
+                </div>
+
+                {proximoPartido.tv && (
+                  <div className="tvBadge">
+                    📺 {proximoPartido.tv}
+                  </div>
+                )}
               </div>
 
               <Link href="/mis-pronosticos" className="nextButton">
@@ -645,6 +654,12 @@ export default function PartidosPage() {
                               {partido.estadio ?? "Estadio pendiente"}
                               {partido.ciudad ? ` · ${partido.ciudad}` : ""}
                             </span>
+
+                            {partido.tv && (
+                              <span className="tvBadge">
+                                📺 {partido.tv}
+                              </span>
+                            )}
                           </div>
 
                           <div className="bottomRow">
@@ -837,6 +852,13 @@ export default function PartidosPage() {
           justify-content: space-between;
           gap: 14px;
           margin-top: 18px;
+        }
+
+        .nextMetaWrap {
+          display:flex;
+          flex-wrap:wrap;
+          gap:10px;
+          align-items:center;
         }
 
         .nextMeta {
@@ -1190,11 +1212,37 @@ export default function PartidosPage() {
           font-size: 14px;
         }
 
+        .metaRow {
+          margin-top: 16px;
+          color: #94a3b8;
+          font-size: 14px;
+          display:flex;
+          flex-wrap:wrap;
+          gap:10px;
+        }
+
         .metaRow span {
           display: inline-flex;
           align-items: center;
           gap: 6px;
         }
+
+        
+        .tvBadge {
+          display:inline-flex;
+          align-items:center;
+          gap:7px;
+          border-radius:999px;
+          padding:8px 12px;
+          background:linear-gradient(135deg, rgba(37,99,235,0.20), rgba(124,58,237,0.16));
+          border:1px solid rgba(147,197,253,0.30);
+          color:#dbeafe;
+          font-size:13px;
+          font-weight:950;
+          white-space:nowrap;
+          box-shadow:0 10px 26px rgba(37,99,235,0.12);
+        }
+
 
         .bottomRow {
           margin-top: 16px;
@@ -1337,6 +1385,13 @@ export default function PartidosPage() {
           margin-top: 18px;
         }
 
+        .nextMetaWrap {
+          display:flex;
+          flex-wrap:wrap;
+          gap:10px;
+          align-items:center;
+        }
+
         .nextMeta {
           display: inline-flex;
           align-items: center;
@@ -1415,13 +1470,35 @@ export default function PartidosPage() {
             text-align: center;
           }
 
-          .bottomRow {
+          
+        .tvBadge {
+          display:inline-flex;
+          align-items:center;
+          gap:7px;
+          border-radius:999px;
+          padding:8px 12px;
+          background:linear-gradient(135deg, rgba(37,99,235,0.20), rgba(124,58,237,0.16));
+          border:1px solid rgba(147,197,253,0.30);
+          color:#dbeafe;
+          font-size:13px;
+          font-weight:950;
+          white-space:nowrap;
+          box-shadow:0 10px 26px rgba(37,99,235,0.12);
+        }
+
+
+        .bottomRow {
             flex-direction: column;
           }
 
           .detailButton,
           .pronosticoButton {
             width: 100%;
+          }
+
+          .tvBadge {
+            width: fit-content;
+            max-width: 100%;
           }
         }
       `}</style>
