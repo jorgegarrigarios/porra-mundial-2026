@@ -772,6 +772,239 @@ export default function ClasificacionPage() {
           }
         }
 
+
+        /* Mobile EV+ fix: compact football table, no horizontal overflow */
+        @media (max-width: 640px) {
+          .clasificacionPage {
+            padding: 22px 12px calc(170px + env(safe-area-inset-bottom));
+            overflow-x: hidden;
+          }
+
+          .container {
+            max-width: 100%;
+            overflow-x: hidden;
+          }
+
+          .rulesPanel {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+          }
+
+          .rulesIcon {
+            width: 46px;
+            height: 46px;
+            border-radius: 16px;
+          }
+
+          .rulesPanel h2 {
+            font-size: 22px;
+          }
+
+          .rulesPanel p {
+            font-size: 14px;
+          }
+
+          .legend {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+
+          .legend div {
+            width: fit-content;
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+
+          .groupCard {
+            width: 100%;
+            overflow: hidden;
+            padding: 16px;
+          }
+
+          .groupHeader {
+            margin-bottom: 14px;
+          }
+
+          .teams {
+            width: 100%;
+            overflow: visible;
+            gap: 10px;
+            padding-bottom: 0;
+          }
+
+          .tableHeader {
+            display: none;
+          }
+
+          .teamRow {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            display: grid;
+            grid-template-columns: 34px repeat(5, minmax(25px, 1fr)) 52px;
+            grid-template-areas:
+              "pos team team team team team pts"
+              ".   pj   g    e    p    dg   .";
+            gap: 9px 7px;
+            padding: 12px 10px;
+            border-radius: 18px;
+          }
+
+          .teamRow .position {
+            grid-area: pos;
+            width: 31px;
+            height: 31px;
+          }
+
+          .teamRow .teamCell {
+            grid-area: team;
+            min-width: 0;
+          }
+
+          .teamRow .flag {
+            width: 34px;
+            height: 34px;
+          }
+
+          .teamRow .teamName {
+            max-width: 100%;
+            font-size: 15px;
+            line-height: 1.15;
+          }
+
+          .teamRow .teamStatus {
+            max-width: 100%;
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: normal;
+          }
+
+          .teamRow .stat,
+          .teamRow .status {
+            min-width: 0;
+            border-radius: 12px;
+            background: rgba(2,6,23,0.28);
+            padding: 6px 3px;
+            text-align: center;
+            font-size: 13px;
+            line-height: 1;
+          }
+
+          .teamRow .stat::before,
+          .teamRow .status::before {
+            display: block;
+            margin-bottom: 4px;
+            color: #94a3b8;
+            font-size: 9px;
+            font-weight: 950;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+          }
+
+          .teamRow > .stat:nth-child(3) {
+            grid-area: pj;
+          }
+
+          .teamRow > .stat:nth-child(3)::before {
+            content: "PJ";
+          }
+
+          .teamRow > .stat:nth-child(4) {
+            grid-area: g;
+          }
+
+          .teamRow > .stat:nth-child(4)::before {
+            content: "G";
+          }
+
+          .teamRow > .stat:nth-child(5) {
+            grid-area: e;
+          }
+
+          .teamRow > .stat:nth-child(5)::before {
+            content: "E";
+          }
+
+          .teamRow > .stat:nth-child(6) {
+            grid-area: p;
+          }
+
+          .teamRow > .stat:nth-child(6)::before {
+            content: "P";
+          }
+
+          .teamRow > .stat:nth-child(7) {
+            grid-area: dg;
+          }
+
+          .teamRow > .stat:nth-child(7)::before {
+            content: "DG";
+          }
+
+          .teamRow > .status {
+            grid-area: pts;
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #dbeafe;
+            background: rgba(37,99,235,0.16);
+            border: 1px solid rgba(96,165,250,0.24);
+            font-size: 18px;
+          }
+
+          .teamRow > .status::before {
+            content: "Pts";
+          }
+
+          .note {
+            font-size: 14px;
+            margin-top: 14px;
+            padding: 12px 13px;
+            border-radius: 16px;
+            background: rgba(34,197,94,0.10);
+            border: 1px solid rgba(34,197,94,0.20);
+          }
+
+          .thirdsPanel {
+            padding: 16px;
+            overflow: hidden;
+          }
+
+          .thirdsHeader h2 {
+            font-size: 28px;
+          }
+
+          .thirdsCounter {
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .thirdCard {
+            grid-template-columns: auto auto 1fr;
+            align-items: center;
+          }
+
+          .thirdStatus {
+            grid-column: 3;
+            width: fit-content;
+          }
+
+          .bracketScroll {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 10px;
+          }
+
+          .bracket {
+            min-width: 820px;
+          }
+        }
+
       `}</style>
     </main>
   );
