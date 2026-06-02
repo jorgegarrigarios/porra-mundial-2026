@@ -9,17 +9,21 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Edit3,
   Filter,
+  Lock,
   Loader2,
   MapPin,
   RefreshCw,
   Search,
+  Sparkles,
   Target,
 } from "lucide-react";
 
 import PhaseBadge from "@/components/PhaseBadge";
 import TeamFlag from "@/components/TeamFlag";
 import { supabase } from "@/lib/supabase";
+import { obtenerParticipanteActual } from "@/lib/participante";
 
 type Partido = {
   id: number;
@@ -34,6 +38,16 @@ type Partido = {
   fase: string | null;
   resultado_local: number | null;
   resultado_visitante: number | null;
+};
+
+type Participante = {
+  id: number;
+  nombre: string | null;
+  nickname?: string | null;
+};
+
+type PronosticoResumen = {
+  partido_id: number;
 };
 
 type Filtro =
@@ -72,6 +86,8 @@ function queryTimeout<T>(ms = 12000): Promise<QueryResult<T>> {
 
 export default function PartidosPage() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
+  const [participante, setParticipante] = useState<Participante | null>(null);
+  const [pronosticosGuardados, setPronosticosGuardados] = useState<Record<number, boolean>>({});
   const [filtroActivo, setFiltroActivo] = useState<Filtro>("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
@@ -86,6 +102,9 @@ export default function PartidosPage() {
     setErrorCarga(null);
 
     try {
+      const participanteActual = await obtenerParticipanteActual();
+      setParticipante(participanteActual);
+
       const response = (await Promise.race([
         supabase
           .from("partidos")
@@ -100,14 +119,46 @@ export default function PartidosPage() {
         console.error("Error cargando partidos:", response.error.message);
         setErrorCarga(response.error.message);
         setPartidos([]);
+        setPronosticosGuardados({});
         return;
       }
 
       setPartidos(response.data ?? []);
+
+      if (!participanteActual) {
+        setPronosticosGuardados({});
+        return;
+      }
+
+      const pronosticosResponse = (await Promise.race([
+        supabase
+          .from("pronosticos")
+          .select("partido_id")
+          .eq("participante_id", participanteActual.id),
+        queryTimeout<PronosticoResumen[]>(),
+      ])) as QueryResult<PronosticoResumen[]>;
+
+      if (pronosticosResponse.error) {
+        console.error(
+          "Error cargando pronósticos guardados:",
+          pronosticosResponse.error.message
+        );
+        setPronosticosGuardados({});
+        return;
+      }
+
+      const guardados: Record<number, boolean> = {};
+
+      (pronosticosResponse.data ?? []).forEach((pronostico) => {
+        guardados[pronostico.partido_id] = true;
+      });
+
+      setPronosticosGuardados(guardados);
     } catch (error) {
       console.error("Error inesperado cargando partidos:", error);
       setErrorCarga("No se pudieron cargar los partidos. Inténtalo de nuevo.");
       setPartidos([]);
+      setPronosticosGuardados({});
     } finally {
       setCargando(false);
     }
@@ -206,6 +257,58 @@ export default function PartidosPage() {
     }
   }
 
+  function esFaseGrupos(fase: string | null) {
+    return fase?.trim().toLowerCase() === "fase de grupos";
+  }
+
+  function esPlaceholderEquipo(equipo: string | null) {
+    const limpio = equipo?.trim();
+
+    if (!limpio) return true;
+
+    const valor = limpio.toLowerCase();
+
+    return (
+      /^[12][a-l]$/i.test(limpio) ||
+      /^3[a-l](\/[a-l])+$/i.test(limpio) ||
+      valor.startsWith("ganador ") ||
+      valor.startsWith("perdedor ")
+    );
+  }
+
+  function partidoTieneEquiposPendientes(partido: Partido) {
+    if (esFaseGrupos(partido.fase)) return false;
+
+    return esPlaceholderEquipo(partido.local) || esPlaceholderEquipo(partido.visitante);
+  }
+
+  function partidoBloqueado(partido: Partido) {
+    const fecha = fechaValida(partido.fecha_inicio);
+    if (!fecha) return false;
+
+    return fecha <= new Date();
+  }
+
+  function partidoFinalizado(partido: Partido) {
+    return (
+      partido.resultado_local !== null && partido.resultado_visitante !== null
+    );
+  }
+
+  function obtenerProximoPartido() {
+    const ahora = new Date();
+
+    return partidos.find((partido) => {
+      const fecha = fechaValida(partido.fecha_inicio);
+      if (!fecha) return false;
+      if (fecha <= ahora) return false;
+      if (partidoFinalizado(partido)) return false;
+      if (partidoTieneEquiposPendientes(partido)) return false;
+
+      return true;
+    }) ?? null;
+  }
+
   const partidosFiltrados = useMemo(() => {
     const textoBusqueda = normalizarTexto(busqueda.trim());
 
@@ -241,6 +344,20 @@ export default function PartidosPage() {
       return true;
     });
   }, [partidos, busqueda, filtroActivo]);
+
+  const proximoPartido = useMemo(() => obtenerProximoPartido(), [partidos]);
+
+  const totalFinalizados = partidos.filter((partido) => partidoFinalizado(partido)).length;
+  const totalAbiertos = partidos.filter(
+    (partido) =>
+      !partidoFinalizado(partido) &&
+      !partidoBloqueado(partido) &&
+      !partidoTieneEquiposPendientes(partido)
+  ).length;
+  const totalPendientesEquipos = partidos.filter((partido) =>
+    partidoTieneEquiposPendientes(partido)
+  ).length;
+  const totalPronosticados = Object.values(pronosticosGuardados).filter(Boolean).length;
 
   const partidosPorFecha = useMemo(() => {
     return partidosFiltrados.reduce<Record<string, Partido[]>>((acc, partido) => {
@@ -298,6 +415,79 @@ export default function PartidosPage() {
             ))}
           </div>
         </div>
+
+
+        {!cargando && !errorCarga && proximoPartido && (
+          <section className="nextMatchCard">
+            <div className="nextMatchLabel">
+              <Sparkles size={16} />
+              Próximo partido
+            </div>
+
+            <div className="nextMatchMain">
+              <Team code={proximoPartido.local_code} name={proximoPartido.local} />
+
+              <div className="nextCenter">
+                <span>{formatearFecha(proximoPartido.fecha_inicio)}</span>
+                <strong>{formatearHora(proximoPartido.fecha_inicio)}</strong>
+                <small>VS</small>
+              </div>
+
+              <Team
+                code={proximoPartido.visitante_code}
+                name={proximoPartido.visitante}
+                alignRight
+              />
+            </div>
+
+            <div className="nextMatchFooter">
+              <div className="nextMeta">
+                <MapPin size={14} />
+                {proximoPartido.estadio ?? "Estadio pendiente"}
+                {proximoPartido.ciudad ? ` · ${proximoPartido.ciudad}` : ""}
+              </div>
+
+              <Link href="/mis-pronosticos" className="nextButton">
+                {pronosticosGuardados[proximoPartido.id] ? (
+                  <>
+                    <Edit3 size={17} />
+                    Editar pronóstico
+                  </>
+                ) : (
+                  <>
+                    <Target size={17} />
+                    Pronosticar ahora
+                  </>
+                )}
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {!cargando && !errorCarga && partidos.length > 0 && (
+          <section className="quickStats">
+            <div>
+              <span>Total partidos</span>
+              <strong>{partidos.length}</strong>
+            </div>
+            <div>
+              <span>Abiertos</span>
+              <strong>{totalAbiertos}</strong>
+            </div>
+            <div>
+              <span>Finalizados</span>
+              <strong>{totalFinalizados}</strong>
+            </div>
+            <div>
+              <span>Tus pronósticos</span>
+              <strong>{participante ? totalPronosticados : "-"}</strong>
+            </div>
+            <div>
+              <span>Equipos pendientes</span>
+              <strong>{totalPendientesEquipos}</strong>
+            </div>
+          </section>
+        )}
 
         {errorCarga && (
           <div className="errorBox">
@@ -358,9 +548,10 @@ export default function PartidosPage() {
 
                   <div className="cards">
                     {partidosFecha.map((partido) => {
-                      const finalizado =
-                        partido.resultado_local !== null &&
-                        partido.resultado_visitante !== null;
+                      const finalizado = partidoFinalizado(partido);
+                      const equiposPendientes = partidoTieneEquiposPendientes(partido);
+                      const cerrado = partidoBloqueado(partido);
+                      const guardado = Boolean(pronosticosGuardados[partido.id]);
 
                       return (
                         <article
@@ -381,17 +572,50 @@ export default function PartidosPage() {
                                 <CheckCircle2 size={15} />
                                 Finalizado
                               </div>
+                            ) : equiposPendientes ? (
+                              <div className="status pendingTeams">
+                                <Lock size={15} />
+                                Equipos pendientes
+                              </div>
+                            ) : cerrado ? (
+                              <div className="status closed">
+                                <Lock size={15} />
+                                Cerrado
+                              </div>
                             ) : (
-                              <div className="status pending">
+                              <div className="status open">
                                 <Clock size={15} />
-                                Pendiente
+                                Abierto
                               </div>
                             )}
                           </div>
 
-                          <div className="timeRow">
-                            <Clock size={16} />
-                            {formatearHora(partido.fecha_inicio)}
+                          <div className="statusLine">
+                            <div className="timeRow">
+                              <Clock size={16} />
+                              {formatearHora(partido.fecha_inicio)}
+                            </div>
+
+                            {participante && (
+                              <div className={`predictionBadge ${guardado ? "saved" : "missing"}`}>
+                                {guardado ? (
+                                  <>
+                                    <CheckCircle2 size={15} />
+                                    Pronóstico guardado
+                                  </>
+                                ) : equiposPendientes ? (
+                                  <>
+                                    <Lock size={15} />
+                                    Todavía no disponible
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertTriangle size={15} />
+                                    Pronóstico pendiente
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="matchRow">
@@ -429,9 +653,12 @@ export default function PartidosPage() {
                               <ArrowRight size={17} />
                             </Link>
 
-                            <Link href="/mis-pronosticos" className="pronosticoButton">
-                              <Target size={17} />
-                              Pronosticar
+                            <Link
+                              href="/mis-pronosticos"
+                              className={`pronosticoButton ${guardado ? "editButton" : ""}`}
+                            >
+                              {guardado ? <Edit3 size={17} /> : <Target size={17} />}
+                              {guardado ? "Editar pronóstico" : "Pronosticar"}
                             </Link>
                           </div>
                         </article>
@@ -540,6 +767,131 @@ export default function PartidosPage() {
           background: rgba(37,99,235,0.22);
           border-color: rgba(37,99,235,0.45);
           color: #bfdbfe;
+        }
+
+
+        .nextMatchCard {
+          margin-bottom: 14px;
+          border-radius: 28px;
+          padding: 22px;
+          background:
+            radial-gradient(circle at top right, rgba(250,204,21,0.18), transparent 36%),
+            linear-gradient(145deg, rgba(37,99,235,0.22), rgba(15,23,42,0.92));
+          border: 1px solid rgba(96,165,250,0.26);
+          box-shadow: 0 24px 70px rgba(2,6,23,0.28);
+        }
+
+        .nextMatchLabel {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 8px 12px;
+          background: rgba(250,204,21,0.12);
+          border: 1px solid rgba(250,204,21,0.22);
+          color: #fde68a;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+          margin-bottom: 16px;
+        }
+
+        .nextMatchMain {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          gap: 18px;
+        }
+
+        .nextCenter {
+          min-width: 150px;
+          border-radius: 24px;
+          padding: 16px;
+          text-align: center;
+          background: rgba(2,6,23,0.46);
+          border: 1px solid rgba(255,255,255,0.11);
+        }
+
+        .nextCenter span,
+        .nextCenter small {
+          display: block;
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: capitalize;
+        }
+
+        .nextCenter strong {
+          display: block;
+          margin: 5px 0;
+          font-size: 32px;
+          line-height: 1;
+          font-weight: 950;
+          color: white;
+        }
+
+        .nextMatchFooter {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin-top: 18px;
+        }
+
+        .nextMeta {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #cbd5e1;
+          font-size: 14px;
+          font-weight: 800;
+          flex-wrap: wrap;
+        }
+
+        .nextButton {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border-radius: 16px;
+          padding: 12px 16px;
+          background: #2563eb;
+          color: white;
+          text-decoration: none;
+          font-weight: 950;
+          white-space: nowrap;
+        }
+
+        .quickStats {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .quickStats div {
+          border-radius: 18px;
+          padding: 14px;
+          background: rgba(15,23,42,0.72);
+          border: 1px solid rgba(255,255,255,0.10);
+        }
+
+        .quickStats span {
+          display: block;
+          color: #94a3b8;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: .08em;
+          text-transform: uppercase;
+          margin-bottom: 5px;
+        }
+
+        .quickStats strong {
+          display: block;
+          font-size: 24px;
+          line-height: 1;
+          font-weight: 950;
         }
 
         .errorBox {
@@ -725,6 +1077,11 @@ export default function PartidosPage() {
           color: #cbd5e1;
         }
 
+        .status.open {
+          background: rgba(37,99,235,0.18);
+          color: #93c5fd;
+        }
+
         .status.pending {
           background: rgba(37,99,235,0.18);
           color: #93c5fd;
@@ -735,7 +1092,26 @@ export default function PartidosPage() {
           color: #86efac;
         }
 
-        .timeRow {
+        .status.closed {
+          background: rgba(239,68,68,0.16);
+          color: #fca5a5;
+        }
+
+        .status.pendingTeams {
+          background: rgba(245,158,11,0.16);
+          color: #fde68a;
+        }
+
+        .statusLine {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 18px;
+        }
+
+        .timeRow,
+        .predictionBadge {
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -744,7 +1120,18 @@ export default function PartidosPage() {
           border-radius: 999px;
           padding: 8px 12px;
           font-weight: 900;
-          margin-bottom: 18px;
+        }
+
+        .predictionBadge.saved {
+          color: #86efac;
+          background: rgba(22,163,74,0.16);
+          border: 1px solid rgba(22,163,74,0.24);
+        }
+
+        .predictionBadge.missing {
+          color: #fde68a;
+          background: rgba(245,158,11,0.14);
+          border: 1px solid rgba(245,158,11,0.24);
         }
 
         .matchRow {
@@ -839,6 +1226,12 @@ export default function PartidosPage() {
           background: #2563eb;
         }
 
+        .pronosticoButton.editButton {
+          background: rgba(37,99,235,0.20);
+          border: 1px solid rgba(96,165,250,0.34);
+          color: #bfdbfe;
+        }
+
         @media (max-width: 760px) {
           .partidosPage {
             padding: 22px 12px 120px;
@@ -874,7 +1267,132 @@ export default function PartidosPage() {
             font-size: 13px;
           }
 
-          .errorBox {
+  
+        .nextMatchCard {
+          margin-bottom: 14px;
+          border-radius: 28px;
+          padding: 22px;
+          background:
+            radial-gradient(circle at top right, rgba(250,204,21,0.18), transparent 36%),
+            linear-gradient(145deg, rgba(37,99,235,0.22), rgba(15,23,42,0.92));
+          border: 1px solid rgba(96,165,250,0.26);
+          box-shadow: 0 24px 70px rgba(2,6,23,0.28);
+        }
+
+        .nextMatchLabel {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 8px 12px;
+          background: rgba(250,204,21,0.12);
+          border: 1px solid rgba(250,204,21,0.22);
+          color: #fde68a;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+          margin-bottom: 16px;
+        }
+
+        .nextMatchMain {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          gap: 18px;
+        }
+
+        .nextCenter {
+          min-width: 150px;
+          border-radius: 24px;
+          padding: 16px;
+          text-align: center;
+          background: rgba(2,6,23,0.46);
+          border: 1px solid rgba(255,255,255,0.11);
+        }
+
+        .nextCenter span,
+        .nextCenter small {
+          display: block;
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: capitalize;
+        }
+
+        .nextCenter strong {
+          display: block;
+          margin: 5px 0;
+          font-size: 32px;
+          line-height: 1;
+          font-weight: 950;
+          color: white;
+        }
+
+        .nextMatchFooter {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin-top: 18px;
+        }
+
+        .nextMeta {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #cbd5e1;
+          font-size: 14px;
+          font-weight: 800;
+          flex-wrap: wrap;
+        }
+
+        .nextButton {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border-radius: 16px;
+          padding: 12px 16px;
+          background: #2563eb;
+          color: white;
+          text-decoration: none;
+          font-weight: 950;
+          white-space: nowrap;
+        }
+
+        .quickStats {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .quickStats div {
+          border-radius: 18px;
+          padding: 14px;
+          background: rgba(15,23,42,0.72);
+          border: 1px solid rgba(255,255,255,0.10);
+        }
+
+        .quickStats span {
+          display: block;
+          color: #94a3b8;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: .08em;
+          text-transform: uppercase;
+          margin-bottom: 5px;
+        }
+
+        .quickStats strong {
+          display: block;
+          font-size: 24px;
+          line-height: 1;
+          font-weight: 950;
+        }
+
+        .errorBox {
             grid-template-columns: 1fr;
           }
 
