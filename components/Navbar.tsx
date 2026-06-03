@@ -645,6 +645,9 @@ export default function Navbar() {
 
           .mobileHeader {
             position: fixed;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            overscroll-behavior: none;
             top: 0;
             left: 0;
             right: 0;
@@ -740,6 +743,10 @@ export default function Navbar() {
 
           .mobileNav {
             position: fixed;
+            bottom: max(10px, env(safe-area-inset-bottom));
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            overscroll-behavior: none;
             left: 10px;
             right: 10px;
             bottom: calc(10px + env(safe-area-inset-bottom));

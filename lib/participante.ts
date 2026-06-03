@@ -213,6 +213,28 @@ export async function obtenerParticipanteActual(): Promise<ParticipanteActual | 
     }
 
     if (participanteCreadoResponse.error) {
+      const msg = participanteCreadoResponse.error.message || "";
+
+      if (
+        msg.includes("duplicate key") ||
+        msg.includes("participantes_auth_user_id_key")
+      ) {
+        const retryResponse = (await conTimeoutSuave(
+          supabase
+            .from("participantes")
+            .select(
+              "id, nombre, apellidos, nickname, role, acepta_privacidad, acepta_terminos"
+            )
+            .eq("auth_user_id", user.id)
+            .maybeSingle(),
+          5000
+        )) as SupabaseResponse<ParticipanteRow> | null;
+
+        if (retryResponse?.data) {
+          return normalizarParticipante(retryResponse.data);
+        }
+      }
+
       console.warn(
         "Error creando participante automáticamente:",
         participanteCreadoResponse.error.message
