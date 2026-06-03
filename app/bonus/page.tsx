@@ -20,8 +20,10 @@ import { obtenerParticipanteActual } from "@/lib/participante";
 import { supabase } from "@/lib/supabase";
 
 type JugadorOption = {
+  id?: number;
   nombre_oficial: string;
   seleccion: string;
+  posicion?: string | null;
 };
 
 type BonusRow = {
@@ -83,6 +85,14 @@ function limpiarValor(valor: string) {
   return limpio.length > 0 ? limpio : null;
 }
 
+function normalizarBusqueda(valor: string | null | undefined) {
+  return (valor ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizarEquipo(equipo: string | null) {
   const limpio = equipo?.trim();
 
@@ -133,6 +143,42 @@ function obtenerCabezasDeSerie(partidos: PartidoRow[]) {
   }
 
   return cabezas;
+}
+
+async function cargarJugadoresActivosPaginado() {
+  const pageSize = 1000;
+  let desde = 0;
+  let todos: JugadorOption[] = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("jugadores")
+      .select("id, nombre_oficial, seleccion, posicion")
+      .eq("activo", true)
+      .order("nombre_oficial")
+      .range(desde, desde + pageSize - 1);
+
+    if (error) {
+      return {
+        data: todos,
+        error,
+      };
+    }
+
+    const bloque = (data || []) as JugadorOption[];
+    todos = [...todos, ...bloque];
+
+    if (bloque.length < pageSize) {
+      break;
+    }
+
+    desde += pageSize;
+  }
+
+  return {
+    data: todos,
+    error: null,
+  };
 }
 
 export default function BonusPage() {
@@ -197,14 +243,10 @@ export default function BonusPage() {
 
         setParticipanteId(participante.id);
 
-        const [{ data: partidosData, error: partidosError }, { data: jugadoresData, error: jugadoresError }, { data: bonusData, error: bonusError }] =
+        const [{ data: partidosData, error: partidosError }, jugadoresResultado, { data: bonusData, error: bonusError }] =
           await Promise.all([
             supabase.from("partidos").select("local, visitante, fase, grupo"),
-            supabase
-              .from("jugadores")
-              .select("nombre_oficial, seleccion")
-              .eq("activo", true)
-              .order("nombre_oficial"),
+            cargarJugadoresActivosPaginado(),
             supabase
               .from("pronosticos_bonus")
               .select(
@@ -220,8 +262,8 @@ export default function BonusPage() {
           throw new Error(partidosError.message);
         }
 
-        if (jugadoresError) {
-          throw new Error(jugadoresError.message);
+        if (jugadoresResultado.error) {
+          throw new Error(jugadoresResultado.error.message);
         }
 
         if (bonusError) {
@@ -245,7 +287,7 @@ export default function BonusPage() {
 
         setSelecciones(equipos);
         setSeleccionesDecepcion(cabezas);
-        setJugadores((jugadoresData || []) as JugadorOption[]);
+        setJugadores(jugadoresResultado.data);
 
         if (bonusData) {
           setBonus(bonusData as BonusRow);
@@ -295,13 +337,12 @@ export default function BonusPage() {
   }
 
   function jugadorExisteEnCatalogo(valor: string | null) {
-    const nombre = valor?.trim();
+    const nombre = normalizarBusqueda(valor);
 
     if (!nombre) return true;
 
     return jugadores.some(
-      (jugador) =>
-        jugador.nombre_oficial.trim().toLowerCase() === nombre.toLowerCase()
+      (jugador) => normalizarBusqueda(jugador.nombre_oficial) === nombre
     );
   }
 
@@ -497,10 +538,11 @@ export default function BonusPage() {
 
           <BonusAutocomplete
             jugadores={jugadores}
+            soloPorteros
             icono={<Shield className="h-5 w-5" />}
             titulo="Mejor portero"
             descripcion="8 puntos si aciertas el mejor portero del Mundial."
-            placeholder="Ejemplo: Courtois"
+            placeholder="Ejemplo: Unai Simon"
             value={bonus.mejor_portero || ""}
             onChange={(valor) => actualizarTexto("mejor_portero", valor)}
           />
@@ -611,7 +653,7 @@ function BonusSelect({
 
 function BonusAutocomplete({
   jugadores,
-
+  soloPorteros = false,
   icono,
   titulo,
   descripcion,
@@ -620,6 +662,7 @@ function BonusAutocomplete({
   onChange,
 }: {
   jugadores: JugadorOption[];
+  soloPorteros?: boolean;
   icono: React.ReactNode;
   titulo: string;
   descripcion: string;
@@ -627,6 +670,64 @@ function BonusAutocomplete({
   value: string;
   onChange: (valor: string) => void;
 }) {
+  const [busqueda, setBusqueda] = useState(value);
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    setBusqueda(value);
+  }, [value]);
+
+  const jugadoresFiltrados = useMemo(() => {
+    const texto = normalizarBusqueda(busqueda);
+
+    const base = soloPorteros
+      ? jugadores.filter((jugador) => {
+          const posicion = normalizarBusqueda(jugador.posicion);
+          return (
+            posicion.includes("goalkeeper") ||
+            posicion.includes("portero") ||
+            posicion.includes("arquero")
+          );
+        })
+      : jugadores;
+
+    if (!texto) {
+      return base.slice(0, 30);
+    }
+
+    return base
+      .filter((jugador) => {
+        const nombre = normalizarBusqueda(jugador.nombre_oficial);
+        const seleccion = normalizarBusqueda(jugador.seleccion);
+        const combinado = `${nombre} ${seleccion}`;
+
+        return (
+          nombre.includes(texto) ||
+          seleccion.includes(texto) ||
+          combinado.includes(texto)
+        );
+      })
+      .slice(0, 30);
+  }, [busqueda, jugadores, soloPorteros]);
+
+  function seleccionarJugador(jugador: JugadorOption) {
+    setBusqueda(jugador.nombre_oficial);
+    onChange(jugador.nombre_oficial);
+    setAbierto(false);
+  }
+
+  function actualizarBusqueda(valor: string) {
+    setBusqueda(valor);
+    setAbierto(true);
+
+    const exacto = jugadores.find(
+      (jugador) =>
+        normalizarBusqueda(jugador.nombre_oficial) === normalizarBusqueda(valor)
+    );
+
+    onChange(exacto ? exacto.nombre_oficial : valor);
+  }
+
   return (
     <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl">
       <div className="flex items-start gap-3">
@@ -638,23 +739,56 @@ function BonusAutocomplete({
           <h2 className="text-lg font-black">{titulo}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-300">{descripcion}</p>
 
-          <input
-            list={`jugadores-${titulo}`}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={placeholder}
-            className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-300"
-          />
-          <datalist id={`jugadores-${titulo}`}>
-            {jugadores.map((jugador) => (
-              <option
-                key={`${jugador.nombre_oficial}-${jugador.seleccion}`}
-                value={jugador.nombre_oficial}
-              >
-                {jugador.seleccion}
-              </option>
-            ))}
-          </datalist>
+          <div className="relative mt-4">
+            <input
+              value={busqueda}
+              onChange={(event) => actualizarBusqueda(event.target.value)}
+              onFocus={() => setAbierto(true)}
+              onBlur={() => {
+                window.setTimeout(() => setAbierto(false), 150);
+              }}
+              placeholder={placeholder}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-300"
+            />
+
+            {abierto && (
+              <div className="absolute z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                {jugadoresFiltrados.length === 0 ? (
+                  <div className="rounded-xl px-3 py-3 text-sm font-semibold text-slate-400">
+                    No aparece en el catálogo. Prueba sin tildes o avisa al administrador.
+                  </div>
+                ) : (
+                  jugadoresFiltrados.map((jugador) => (
+                    <button
+                      key={`${jugador.nombre_oficial}-${jugador.seleccion}`}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => seleccionarJugador(jugador)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-white/10"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-white">
+                          {jugador.nombre_oficial}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs font-bold text-slate-400">
+                          {jugador.seleccion}
+                          {jugador.posicion ? ` · ${jugador.posicion}` : ""}
+                        </span>
+                      </span>
+
+                      <span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-200">
+                        Elegir
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <p className="mt-2 text-xs font-semibold text-slate-400">
+            Busca sin preocuparte por tildes. Se guardará el nombre oficial del catálogo.
+          </p>
         </div>
       </div>
     </section>
