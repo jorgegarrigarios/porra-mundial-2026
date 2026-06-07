@@ -68,6 +68,21 @@ const SELECCIONES_REVELACION = [
   "Qatar",
 ];
 
+const SELECCIONES_DECEPCION = [
+  "México",
+  "Canadá",
+  "Estados Unidos",
+  "Argentina",
+  "Brasil",
+  "Francia",
+  "España",
+  "Inglaterra",
+  "Portugal",
+  "Alemania",
+  "Países Bajos",
+  "Bélgica",
+];
+
 const bonusInicial: BonusRow = {
   participante_id: 0,
   campeon: null,
@@ -113,36 +128,6 @@ function normalizarEquipo(equipo: string | null) {
 
 function esFaseGrupos(fase: string | null) {
   return fase?.trim().toLowerCase() === "fase de grupos";
-}
-
-function obtenerCabezasDeSerie(partidos: PartidoRow[]) {
-  const gruposOrdenados = Array.from(
-    new Set(
-      partidos
-        .filter((partido) => esFaseGrupos(partido.fase))
-        .map((partido) => partido.grupo?.trim())
-        .filter((grupo): grupo is string => Boolean(grupo))
-    )
-  ).sort((a, b) => a.localeCompare(b, "es"));
-
-  const cabezas: string[] = [];
-
-  for (const grupo of gruposOrdenados) {
-    const primerPartidoGrupo = partidos.find(
-      (partido) =>
-        esFaseGrupos(partido.fase) &&
-        partido.grupo?.trim() === grupo &&
-        normalizarEquipo(partido.local)
-    );
-
-    const cabeza = normalizarEquipo(primerPartidoGrupo?.local || null);
-
-    if (cabeza && !cabezas.includes(cabeza)) {
-      cabezas.push(cabeza);
-    }
-  }
-
-  return cabezas;
 }
 
 async function cargarJugadoresActivosPaginado() {
@@ -283,10 +268,12 @@ export default function BonusPage() {
           )
         ).sort((a, b) => a.localeCompare(b, "es"));
 
-        const cabezas = obtenerCabezasDeSerie(partidos);
-
         setSelecciones(equipos);
-        setSeleccionesDecepcion(cabezas);
+        setSeleccionesDecepcion(
+          SELECCIONES_DECEPCION.filter((seleccion) =>
+            equipos.includes(seleccion)
+          )
+        );
         setJugadores(jugadoresResultado.data);
 
         if (bonusData) {
