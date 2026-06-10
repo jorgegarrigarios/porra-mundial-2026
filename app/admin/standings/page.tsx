@@ -9,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Shield,
+  UploadCloud,
   Trophy,
 } from "lucide-react";
 
@@ -198,6 +199,9 @@ export default function AdminStandingsPage() {
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [data, setData] = useState<ApiStandingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importandoGrupos, setImportandoGrupos] = useState(false);
+  const [mensajeImportacion, setMensajeImportacion] = useState<string | null>(null);
+  const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
   async function cargarStandings() {
     setCargandoDatos(true);
@@ -227,6 +231,66 @@ export default function AdminStandingsPage() {
       );
     } finally {
       setCargandoDatos(false);
+    }
+  }
+
+  async function importarClasificadosOficiales() {
+    setImportandoGrupos(true);
+    setMensajeImportacion(null);
+    setErrorImportacion(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("No hay sesión activa. Vuelve a iniciar sesión.");
+      }
+
+      const res = await fetch("/api/admin/importar-resultados-grupos", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        resumen?: {
+          gruposProcesados?: number;
+          resultados?: Array<{
+            grupo: string;
+            clasificado_1: string;
+            clasificado_2: string;
+          }>;
+        };
+      };
+
+      if (!res.ok || !json.ok) {
+        throw new Error(
+          json.error ?? "No se pudieron importar los clasificados oficiales."
+        );
+      }
+
+      setMensajeImportacion(
+        `Clasificados oficiales importados correctamente: ${
+          json.resumen?.gruposProcesados ?? 0
+        } grupos guardados en resultados_grupos.`
+      );
+    } catch (err) {
+      setErrorImportacion(
+        err instanceof Error
+          ? err.message
+          : "Error desconocido importando clasificados oficiales."
+      );
+    } finally {
+      setImportandoGrupos(false);
     }
   }
 
@@ -344,25 +408,55 @@ export default function AdminStandingsPage() {
             </div>
           </div>
 
-          <button
-            className="refreshButton"
-            type="button"
-            onClick={cargarStandings}
-            disabled={cargandoDatos}
-          >
-            {cargandoDatos ? (
-              <Loader2 size={18} className="spin" />
-            ) : (
-              <RefreshCw size={18} />
-            )}
-            Actualizar desde API
-          </button>
+          <div className="actionsBox">
+            <button
+              className="refreshButton"
+              type="button"
+              onClick={cargarStandings}
+              disabled={cargandoDatos || importandoGrupos}
+            >
+              {cargandoDatos ? (
+                <Loader2 size={18} className="spin" />
+              ) : (
+                <RefreshCw size={18} />
+              )}
+              Actualizar desde API
+            </button>
+
+            <button
+              className="importButton"
+              type="button"
+              onClick={importarClasificadosOficiales}
+              disabled={cargandoDatos || importandoGrupos}
+            >
+              {importandoGrupos ? (
+                <Loader2 size={18} className="spin" />
+              ) : (
+                <UploadCloud size={18} />
+              )}
+              Importar clasificados oficiales
+            </button>
+          </div>
         </section>
 
         {error && (
           <div className="errorBox">
             <AlertTriangle size={20} />
             <span>{error}</span>
+          </div>
+        )}
+
+        {errorImportacion && (
+          <div className="errorBox">
+            <AlertTriangle size={20} />
+            <span>{errorImportacion}</span>
+          </div>
+        )}
+
+        {mensajeImportacion && (
+          <div className="successBox">
+            <CheckCircle2 size={20} />
+            <span>{mensajeImportacion}</span>
           </div>
         )}
 
@@ -605,13 +699,13 @@ function Styles() {
 
       .summaryGrid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(280px, 1.15fr);
         gap: 14px;
         margin-bottom: 18px;
       }
 
       .summaryCard,
-      .refreshButton {
+      .actionsBox {
         border-radius: 22px;
         border: 1px solid rgba(148, 163, 184, 0.22);
         background: rgba(15, 23, 42, 0.78);
@@ -645,10 +739,19 @@ function Styles() {
         font-weight: 950;
       }
 
-      .refreshButton {
+      .actionsBox {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .refreshButton,
+      .importButton {
         color: white;
-        background: #16a34a;
         border: none;
+        border-radius: 16px;
+        padding: 13px 14px;
+        min-height: 52px;
         font-weight: 950;
         display: inline-flex;
         align-items: center;
@@ -657,13 +760,23 @@ function Styles() {
         cursor: pointer;
       }
 
-      .refreshButton:disabled {
+      .refreshButton {
+        background: #16a34a;
+      }
+
+      .importButton {
+        background: #2563eb;
+      }
+
+      .refreshButton:disabled,
+      .importButton:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
 
       .safeNote,
       .errorBox,
+      .successBox,
       .loadingBox {
         border-radius: 20px;
         padding: 16px;
@@ -685,6 +798,12 @@ function Styles() {
         background: rgba(239, 68, 68, 0.14);
         border: 1px solid rgba(239, 68, 68, 0.30);
         color: #fecaca;
+      }
+
+      .successBox {
+        background: rgba(22, 163, 74, 0.14);
+        border: 1px solid rgba(22, 163, 74, 0.30);
+        color: #bbf7d0;
       }
 
       .loadingBox {
