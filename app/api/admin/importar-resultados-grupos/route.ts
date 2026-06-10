@@ -263,14 +263,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error } = await supabaseAdmin
+    /*
+      Evitamos upsert porque la tabla resultados_grupos no tiene índice unique
+      visible sobre "grupo". Esta operación solo afecta a resultados_grupos.
+    */
+    const { error: deleteError } = await supabaseAdmin
       .from("resultados_grupos")
-      .upsert(resultados, {
-        onConflict: "grupo",
-      });
+      .delete()
+      .not("id", "is", null);
 
-    if (error) {
-      throw new Error(`Error guardando resultados_grupos: ${error.message}`);
+    if (deleteError) {
+      throw new Error(`Error limpiando resultados_grupos: ${deleteError.message}`);
+    }
+
+    const { error: insertError } = await supabaseAdmin
+      .from("resultados_grupos")
+      .insert(resultados);
+
+    if (insertError) {
+      throw new Error(
+        `Error guardando resultados_grupos: ${insertError.message}`
+      );
     }
 
     return NextResponse.json({
