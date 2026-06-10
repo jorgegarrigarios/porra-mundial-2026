@@ -212,6 +212,19 @@ function extraerResultadosGrupos(dataApi: FootballStandingsResponse) {
     .filter((item): item is ResultadoGrupo => item !== null);
 }
 
+/*
+  PRUEBA TEMPORAL GET:
+  Sirve solo para comprobar en navegador que la ruta existe.
+  No guarda nada en Supabase.
+*/
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    mensaje:
+      "Ruta importar-resultados-grupos operativa. Para guardar datos hay que llamar por POST desde el botón admin.",
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const token = obtenerToken(request);
@@ -263,10 +276,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-      Evitamos upsert porque la tabla resultados_grupos no tiene índice unique
-      visible sobre "grupo". Esta operación solo afecta a resultados_grupos.
-    */
     const { error: deleteError } = await supabaseAdmin
       .from("resultados_grupos")
       .delete()
