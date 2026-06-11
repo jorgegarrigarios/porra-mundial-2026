@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Loader2,
+  RefreshCw,
   Save,
   Shield,
   Trophy,
@@ -34,6 +35,22 @@ type ValoresPartido = {
   clasificadoReal: string;
 };
 
+type ResumenImportacionApi = {
+  fixturesEncontrados?: number;
+  mapeados?: number;
+  actualizados?: number;
+  ignorados?: number;
+  pronosticosActualizados?: number;
+};
+
+type RespuestaImportacionApi = {
+  ok?: boolean;
+  error?: string;
+  resumen?: ResumenImportacionApi;
+  errores?: string[];
+  force?: boolean;
+};
+
 function esEliminatoria(fase: string | null) {
   return fase?.trim().toLowerCase() !== "fase de grupos";
 }
@@ -47,6 +64,22 @@ function tieneResultadoGuardado(partido: Partido) {
   return partido.resultado_local !== null && partido.resultado_visitante !== null;
 }
 
+function formatearMensajeImportacion(data: RespuestaImportacionApi) {
+  const resumen = data.resumen;
+
+  if (!resumen) {
+    return data.ok
+      ? "Resultados importados desde API correctamente."
+      : data.error || "No se pudieron importar resultados desde API.";
+  }
+
+  return [
+    `API resultados: ${resumen.actualizados ?? 0} partidos actualizados`,
+    `${resumen.mapeados ?? 0}/${resumen.fixturesEncontrados ?? 0} fixtures mapeados`,
+    `${resumen.pronosticosActualizados ?? 0} pronósticos recalculados`,
+  ].join(" · ");
+}
+
 export default function AdminResultadosPage() {
   const router = useRouter();
 
@@ -55,71 +88,87 @@ export default function AdminResultadosPage() {
 
   const [valores, setValores] = useState<Record<number, ValoresPartido>>({});
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
+  const [importandoApi, setImportandoApi] = useState(false);
+
+  async function cargarPartidos() {
+    const { data, error: errorPartidos } = await supabase
+      .from("partidos")
+      .select("*")
+      .order("fecha_inicio", { ascending: true, nullsFirst: false });
+
+    if (errorPartidos) {
+      throw new Error(errorPartidos.message);
+    }
+
+    const partidosCargados = (data ?? []) as Partido[];
+    setPartidos(partidosCargados);
+
+    const iniciales: Record<number, ValoresPartido> = {};
+
+    partidosCargados.forEach((p) => {
+      iniciales[p.id] = {
+        local: p.resultado_local !== null ? p.resultado_local.toString() : "",
+        visitante:
+          p.resultado_visitante !== null
+            ? p.resultado_visitante.toString()
+            : "",
+        fechaInicio: p.fecha_inicio
+          ? new Date(p.fecha_inicio).toISOString().slice(0, 16)
+          : "",
+        clasificadoReal: p.clasificado_real ?? "",
+      };
+    });
+
+    setValores(iniciales);
+  }
 
   useEffect(() => {
     let activo = true;
 
     async function cargarDatos() {
-      setCargando(true);
-      setMensaje(null);
+      try {
+        setCargando(true);
+        setMensaje(null);
+        setError(null);
 
-      const admin = await comprobarAdminActual();
+        const admin = await comprobarAdminActual();
 
-      if (!activo) return;
+        if (!activo) return;
 
-      if (!admin.isAdmin) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        if (!admin.isAdmin) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
 
-        if (!session) {
-          router.replace("/login");
+          if (!session) {
+            router.replace("/login");
+            return;
+          }
+
+          router.replace("/");
           return;
         }
 
-        router.replace("/");
-        return;
+        setAutorizado(true);
+        await cargarPartidos();
+      } catch (err) {
+        console.error("Error cargando partidos:", err);
+        if (activo) {
+          setError(
+            err instanceof Error
+              ? `Error cargando partidos: ${err.message}`
+              : "Error cargando partidos."
+          );
+        }
+      } finally {
+        if (activo) {
+          setCargando(false);
+        }
       }
-
-      setAutorizado(true);
-
-      const { data, error } = await supabase
-        .from("partidos")
-        .select("*")
-        .order("fecha_inicio", { ascending: true, nullsFirst: false });
-
-      if (!activo) return;
-
-      if (error) {
-        console.error("Error cargando partidos:", error.message);
-        alert("Error cargando partidos: " + error.message);
-        setCargando(false);
-        return;
-      }
-
-      setPartidos((data ?? []) as Partido[]);
-
-      const iniciales: Record<number, ValoresPartido> = {};
-
-      ((data ?? []) as Partido[]).forEach((p) => {
-        iniciales[p.id] = {
-          local: p.resultado_local !== null ? p.resultado_local.toString() : "",
-          visitante:
-            p.resultado_visitante !== null
-              ? p.resultado_visitante.toString()
-              : "",
-          fechaInicio: p.fecha_inicio
-            ? new Date(p.fecha_inicio).toISOString().slice(0, 16)
-            : "",
-          clasificadoReal: p.clasificado_real ?? "",
-        };
-      });
-
-      setValores(iniciales);
-      setCargando(false);
     }
 
     cargarDatos();
@@ -129,9 +178,56 @@ export default function AdminResultadosPage() {
     };
   }, [router]);
 
+  async function importarResultadosDesdeApi(force = false) {
+    try {
+      setImportandoApi(true);
+      setMensaje(null);
+      setError(null);
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setError("No se ha podido recuperar tu sesión de administrador. Cierra sesión y vuelve a entrar.");
+        return;
+      }
+
+      const response = await fetch("/api/admin/importar-resultados", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ force }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as RespuestaImportacionApi;
+
+      if (!response.ok || !data.ok) {
+        const errores = data.errores?.length ? ` ${data.errores.join(" | ")}` : "";
+        throw new Error(data.error || `Error HTTP ${response.status}.${errores}`);
+      }
+
+      await cargarPartidos();
+      setMensaje(formatearMensajeImportacion(data));
+    } catch (err) {
+      console.error("Error importando resultados desde API:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se han podido importar resultados desde API."
+      );
+    } finally {
+      setImportandoApi(false);
+    }
+  }
+
   async function guardarResultado(partido: Partido) {
     setGuardandoId(partido.id);
     setMensaje(null);
+    setError(null);
 
     try {
       const local = valores[partido.id]?.local ?? "";
@@ -147,7 +243,7 @@ export default function AdminResultadosPage() {
         resultadoLocal !== null &&
         (!Number.isInteger(resultadoLocal) || resultadoLocal < 0)
       ) {
-        alert("Resultado local no válido.");
+        setError("Resultado local no válido.");
         return;
       }
 
@@ -155,7 +251,7 @@ export default function AdminResultadosPage() {
         resultadoVisitante !== null &&
         (!Number.isInteger(resultadoVisitante) || resultadoVisitante < 0)
       ) {
-        alert("Resultado visitante no válido.");
+        setError("Resultado visitante no válido.");
         return;
       }
 
@@ -166,7 +262,7 @@ export default function AdminResultadosPage() {
         resultadoLocal === resultadoVisitante &&
         !clasificadoRealLimpio
       ) {
-        alert("En una eliminatoria empatada debes indicar quién se clasifica.");
+        setError("En una eliminatoria empatada debes indicar quién se clasifica.");
         return;
       }
 
@@ -182,7 +278,7 @@ export default function AdminResultadosPage() {
 
       if (errorPartido) {
         console.error("Error guardando partido:", errorPartido.message);
-        alert("Error guardando partido: " + errorPartido.message);
+        setError("Error guardando partido: " + errorPartido.message);
         return;
       }
 
@@ -209,7 +305,7 @@ export default function AdminResultadosPage() {
       );
     } catch (error) {
       console.error("Error inesperado:", error);
-      alert("Error inesperado guardando el partido.");
+      setError("Error inesperado guardando el partido.");
     } finally {
       setGuardandoId(null);
     }
@@ -244,16 +340,47 @@ export default function AdminResultadosPage() {
           <div>
             <h1>Admin resultados</h1>
             <p>
-              Actualiza inicio, resultados, clasificado real y recalcula puntos
-              V1.2 automáticamente.
+              Actualiza resultados desde API-FOOTBALL o manualmente, y recalcula puntos V1.2 automáticamente.
             </p>
           </div>
         </div>
+
+        <section className="apiPanel">
+          <div>
+            <p className="apiEyebrow">API-FOOTBALL</p>
+            <h2>Actualizar resultados automáticamente</h2>
+            <p>
+              Importa resultados finalizados desde API, guarda marcadores oficiales y recalcula el ranking.
+              Durante el partido puede actualizar el estado, pero los puntos se consolidan al finalizar.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="apiButton"
+            disabled={importandoApi}
+            onClick={() => importarResultadosDesdeApi(false)}
+          >
+            {importandoApi ? (
+              <Loader2 className="spin" size={20} />
+            ) : (
+              <RefreshCw size={20} />
+            )}
+            {importandoApi ? "Actualizando..." : "Actualizar desde API"}
+          </button>
+        </section>
 
         {mensaje && (
           <div className="successBox">
             <CheckCircle2 size={20} />
             <span>{mensaje}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="errorBox">
+            <Shield size={20} />
+            <span>{error}</span>
           </div>
         )}
 
@@ -388,7 +515,7 @@ export default function AdminResultadosPage() {
                 )}
 
                 <button
-                  disabled={guardandoId === partido.id}
+                  disabled={guardandoId === partido.id || importandoApi}
                   onClick={() => guardarResultado(partido)}
                 >
                   {resultadoGuardado ? (
@@ -409,7 +536,7 @@ export default function AdminResultadosPage() {
 
         <div className="note">
           <Trophy size={20} />
-          Al guardar un partido se recalculan automáticamente partidos, grupos,
+          Al guardar un partido manualmente o importar desde API se recalculan automáticamente partidos, grupos,
           bonus y ranking V1.2.
         </div>
       </div>
@@ -486,17 +613,71 @@ function Styles() {
         margin-top: 4px;
       }
 
-      .successBox {
+      .apiPanel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 18px;
+        border-radius: 28px;
+        border: 1px solid rgba(34,197,94,0.26);
+        background: linear-gradient(135deg, rgba(34,197,94,0.14), rgba(15,23,42,0.84));
+        padding: 24px;
+      }
+
+      .apiEyebrow {
+        margin: 0 0 8px;
+        color: #86efac;
+        font-size: 12px;
+        text-transform: uppercase;
+        font-weight: 950;
+        letter-spacing: 1px;
+      }
+
+      .apiPanel h2 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 950;
+      }
+
+      .apiPanel p:not(.apiEyebrow) {
+        margin: 8px 0 0;
+        color: #cbd5e1;
+        line-height: 1.55;
+        font-weight: 750;
+        max-width: 720px;
+      }
+
+      .apiButton {
+        background: #16a34a;
+        min-width: 230px;
+      }
+
+      .apiButton:hover {
+        background: #15803d;
+      }
+
+      .successBox,
+      .errorBox {
         display: flex;
         align-items: center;
         gap: 10px;
         margin-bottom: 18px;
         border-radius: 22px;
+        padding: 16px 18px;
+        font-weight: 900;
+      }
+
+      .successBox {
         background: rgba(34,197,94,0.12);
         border: 1px solid rgba(34,197,94,0.28);
         color: #bbf7d0;
-        padding: 16px 18px;
-        font-weight: 900;
+      }
+
+      .errorBox {
+        background: rgba(248,113,113,0.12);
+        border: 1px solid rgba(248,113,113,0.30);
+        color: #fecaca;
       }
 
       .cards {
@@ -676,6 +857,15 @@ function Styles() {
       }
 
       @media (max-width: 900px) {
+        .apiPanel {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .apiButton {
+          width: 100%;
+        }
+
         .card {
           grid-template-columns: 1fr;
         }
