@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Shield,
   UploadCloud,
+  Calculator,
   Trophy,
 } from "lucide-react";
 
@@ -200,6 +201,7 @@ export default function AdminStandingsPage() {
   const [data, setData] = useState<ApiStandingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importandoGrupos, setImportandoGrupos] = useState(false);
+  const [recalculandoGrupos, setRecalculandoGrupos] = useState(false);
   const [mensajeImportacion, setMensajeImportacion] = useState<string | null>(null);
   const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
@@ -291,6 +293,67 @@ export default function AdminStandingsPage() {
       );
     } finally {
       setImportandoGrupos(false);
+    }
+  }
+
+  async function recalcularClasificadosGrupos() {
+    setRecalculandoGrupos(true);
+    setMensajeImportacion(null);
+    setErrorImportacion(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("No hay sesión activa. Vuelve a iniciar sesión.");
+      }
+
+      const res = await fetch("/api/admin/recalcular-clasificados-grupos", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        resumen?: {
+          resultadosGrupos?: number;
+          pronosticosEncontrados?: number;
+          actualizados?: number;
+          ignorados?: number;
+          puntosTotalesAsignados?: number;
+        };
+      };
+
+      if (!res.ok || !json.ok) {
+        throw new Error(
+          json.error ?? "No se pudieron recalcular los clasificados de grupo."
+        );
+      }
+
+      setMensajeImportacion(
+        `Puntos de clasificados recalculados: ${
+          json.resumen?.actualizados ?? 0
+        } pronósticos actualizados de ${
+          json.resumen?.pronosticosEncontrados ?? 0
+        }. Puntos asignados: ${json.resumen?.puntosTotalesAsignados ?? 0}.`
+      );
+    } catch (err) {
+      setErrorImportacion(
+        err instanceof Error
+          ? err.message
+          : "Error desconocido recalculando clasificados de grupo."
+      );
+    } finally {
+      setRecalculandoGrupos(false);
     }
   }
 
@@ -413,7 +476,7 @@ export default function AdminStandingsPage() {
               className="refreshButton"
               type="button"
               onClick={cargarStandings}
-              disabled={cargandoDatos || importandoGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
             >
               {cargandoDatos ? (
                 <Loader2 size={18} className="spin" />
@@ -427,7 +490,7 @@ export default function AdminStandingsPage() {
               className="importButton"
               type="button"
               onClick={importarClasificadosOficiales}
-              disabled={cargandoDatos || importandoGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
             >
               {importandoGrupos ? (
                 <Loader2 size={18} className="spin" />
@@ -435,6 +498,20 @@ export default function AdminStandingsPage() {
                 <UploadCloud size={18} />
               )}
               Importar clasificados oficiales
+            </button>
+
+            <button
+              className="recalculateButton"
+              type="button"
+              onClick={recalcularClasificadosGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
+            >
+              {recalculandoGrupos ? (
+                <Loader2 size={18} className="spin" />
+              ) : (
+                <Calculator size={18} />
+              )}
+              Recalcular puntos grupos
             </button>
           </div>
         </section>
@@ -746,7 +823,8 @@ function Styles() {
       }
 
       .refreshButton,
-      .importButton {
+      .importButton,
+      .recalculateButton {
         color: white;
         border: none;
         border-radius: 16px;
@@ -768,8 +846,13 @@ function Styles() {
         background: #2563eb;
       }
 
+      .recalculateButton {
+        background: #7c3aed;
+      }
+
       .refreshButton:disabled,
-      .importButton:disabled {
+      .importButton:disabled,
+      .recalculateButton:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
