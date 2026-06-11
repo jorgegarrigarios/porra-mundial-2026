@@ -7,6 +7,7 @@ import {
   Goal,
   GoalIcon,
   Loader2,
+  Lock,
   Medal,
   Save,
   Shield,
@@ -82,6 +83,20 @@ const SELECCIONES_DECEPCION = [
   "Países Bajos",
   "Bélgica",
 ];
+
+const MUNDIAL_START_AT = new Date("2026-06-11T21:00:00+02:00");
+
+function estanBonusBloqueados() {
+  return new Date() >= MUNDIAL_START_AT;
+}
+
+function textoFechaBloqueo() {
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "Europe/Madrid",
+  }).format(MUNDIAL_START_AT);
+}
 
 const bonusInicial: BonusRow = {
   participante_id: 0,
@@ -178,6 +193,7 @@ export default function BonusPage() {
   const [error, setError] = useState<string | null>(null);
 
   const bonusYaGuardados = Boolean(bonus.id);
+  const bonusBloqueados = estanBonusBloqueados();
 
   const seleccionesRevelacion = useMemo(() => {
     return SELECCIONES_REVELACION.filter((seleccion) =>
@@ -307,6 +323,11 @@ export default function BonusPage() {
     setMensaje(null);
     setError(null);
 
+    if (bonusBloqueados) {
+      setError("Los bonus ya están bloqueados porque el Mundial ha comenzado.");
+      return;
+    }
+
     setBonus((actual) => ({
       ...actual,
       [campo]: limpiarValor(valor),
@@ -316,6 +337,11 @@ export default function BonusPage() {
   function actualizarTexto(campo: CampoTexto, valor: string) {
     setMensaje(null);
     setError(null);
+
+    if (bonusBloqueados) {
+      setError("Los bonus ya están bloqueados porque el Mundial ha comenzado.");
+      return;
+    }
 
     setBonus((actual) => ({
       ...actual,
@@ -354,6 +380,12 @@ export default function BonusPage() {
   async function guardarBonus() {
     if (!participanteId) {
       setError("No se ha podido identificar tu usuario.");
+      return;
+    }
+
+    if (bonusBloqueados) {
+      setMensaje(null);
+      setError("Los bonus ya están bloqueados desde el inicio del Mundial. No se pueden modificar.");
       return;
     }
 
@@ -448,7 +480,13 @@ export default function BonusPage() {
                 Estos puntos pueden decidir la liga en las últimas jornadas.
               </p>
 
-              {bonusYaGuardados && (
+              {bonusBloqueados && (
+                <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100">
+                  Bonus bloqueados desde {textoFechaBloqueo()}. Ya no se pueden modificar.
+                </div>
+              )}
+
+              {!bonusBloqueados && bonusYaGuardados && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-200">
                   <CheckCircle2 className="h-4 w-4" />
                   Bonus guardados. Puedes actualizarlos mientras estén abiertos.
@@ -493,6 +531,7 @@ export default function BonusPage() {
             value={bonus.campeon || ""}
             opciones={selecciones}
             onChange={(valor) => actualizarSeleccion("campeon", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusDobleFinalista
@@ -501,6 +540,7 @@ export default function BonusPage() {
             finalista2={bonus.finalista_2 || ""}
             onFinalista1={(valor) => actualizarSeleccion("finalista_1", valor)}
             onFinalista2={(valor) => actualizarSeleccion("finalista_2", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusAutocomplete
@@ -511,6 +551,7 @@ export default function BonusPage() {
             placeholder="Ejemplo: Mbappé"
             value={bonus.bota_oro || ""}
             onChange={(valor) => actualizarTexto("bota_oro", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusAutocomplete
@@ -521,6 +562,7 @@ export default function BonusPage() {
             placeholder="Ejemplo: Vinícius Jr."
             value={bonus.mejor_jugador || ""}
             onChange={(valor) => actualizarTexto("mejor_jugador", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusAutocomplete
@@ -532,6 +574,7 @@ export default function BonusPage() {
             placeholder="Ejemplo: Unai Simon"
             value={bonus.mejor_portero || ""}
             onChange={(valor) => actualizarTexto("mejor_portero", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusSelect
@@ -541,6 +584,7 @@ export default function BonusPage() {
             value={bonus.seleccion_revelacion || ""}
             opciones={seleccionesRevelacion}
             onChange={(valor) => actualizarSeleccion("seleccion_revelacion", valor)}
+            disabled={bonusBloqueados}
           />
 
           <BonusSelect
@@ -550,6 +594,7 @@ export default function BonusPage() {
             value={bonus.seleccion_decepcion || ""}
             opciones={seleccionesDecepcion}
             onChange={(valor) => actualizarSeleccion("seleccion_decepcion", valor)}
+            disabled={bonusBloqueados}
           />
 
           <section className="mb-10 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl md:col-span-2">
@@ -558,34 +603,47 @@ export default function BonusPage() {
                 <div className="flex items-center gap-2 text-emerald-200">
                   <Trophy className="h-5 w-5" />
                   <h2 className="text-lg font-black">
-                    {bonusYaGuardados ? "Actualizar pronósticos bonus" : "Guardar pronósticos bonus"}
+                    {bonusBloqueados
+                      ? "Pronósticos bonus cerrados"
+                      : bonusYaGuardados
+                      ? "Actualizar pronósticos bonus"
+                      : "Guardar pronósticos bonus"}
                   </h2>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  {bonusYaGuardados
+                  {bonusBloqueados
+                    ? "Los bonus quedaron bloqueados al comenzar el Mundial. Puedes consultar tus elecciones, pero ya no es posible modificarlas."
+                    : bonusYaGuardados
                     ? "Tus bonus ya están guardados. Puedes modificarlos y volver a actualizarlos mientras estén abiertos."
                     : "Podrás modificarlos hasta el bloqueo oficial antes del primer partido del Mundial."}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={guardarBonus}
-                disabled={guardando}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {guardando ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {bonusYaGuardados ? "Actualizando" : "Guardando"}
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    {bonusYaGuardados ? "Actualizar bonus" : "Guardar bonus"}
-                  </>
-                )}
-              </button>
+              {bonusBloqueados ? (
+                <div className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700/80 px-5 py-3 text-sm font-black text-slate-300 shadow-lg shadow-slate-950/30">
+                  <Lock className="h-4 w-4" />
+                  Cerrado
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={guardarBonus}
+                  disabled={guardando}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {guardando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {bonusYaGuardados ? "Actualizando" : "Guardando"}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      {bonusYaGuardados ? "Actualizar bonus" : "Guardar bonus"}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </section>
         </section>
@@ -601,6 +659,7 @@ function BonusSelect({
   value,
   opciones,
   onChange,
+  disabled = false,
 }: {
   icono: React.ReactNode;
   titulo: string;
@@ -608,6 +667,7 @@ function BonusSelect({
   value: string;
   opciones: string[];
   onChange: (valor: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl">
@@ -623,7 +683,8 @@ function BonusSelect({
           <select
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
+            disabled={disabled}
+            className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <option value="">Selecciona una selección</option>
             {opciones.map((opcion) => (
@@ -647,6 +708,7 @@ function BonusAutocomplete({
   placeholder,
   value,
   onChange,
+  disabled = false,
 }: {
   jugadores: JugadorOption[];
   soloPorteros?: boolean;
@@ -656,6 +718,7 @@ function BonusAutocomplete({
   placeholder: string;
   value: string;
   onChange: (valor: string) => void;
+  disabled?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState(value);
   const [abierto, setAbierto] = useState(false);
@@ -730,15 +793,18 @@ function BonusAutocomplete({
             <input
               value={busqueda}
               onChange={(event) => actualizarBusqueda(event.target.value)}
-              onFocus={() => setAbierto(true)}
+              disabled={disabled}
+              onFocus={() => {
+                if (!disabled) setAbierto(true);
+              }}
               onBlur={() => {
                 window.setTimeout(() => setAbierto(false), 150);
               }}
               placeholder={placeholder}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-300"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             />
 
-            {abierto && (
+            {abierto && !disabled && (
               <div className="absolute z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
                 {jugadoresFiltrados.length === 0 ? (
                   <div className="rounded-xl px-3 py-3 text-sm font-semibold text-slate-400">
@@ -788,12 +854,14 @@ function BonusDobleFinalista({
   finalista2,
   onFinalista1,
   onFinalista2,
+  disabled = false,
 }: {
   opciones: string[];
   finalista1: string;
   finalista2: string;
   onFinalista1: (valor: string) => void;
   onFinalista2: (valor: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl">
@@ -812,7 +880,8 @@ function BonusDobleFinalista({
             <select
               value={finalista1}
               onChange={(event) => onFinalista1(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
+              disabled={disabled}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">Finalista 1</option>
               {opciones.map((opcion) => (
@@ -825,7 +894,8 @@ function BonusDobleFinalista({
             <select
               value={finalista2}
               onChange={(event) => onFinalista2(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
+              disabled={disabled}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">Finalista 2</option>
               {opciones.map((opcion) => (

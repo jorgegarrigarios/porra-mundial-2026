@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Flag,
   Loader2,
+  Lock,
   Medal,
   Save,
   ShieldCheck,
@@ -68,6 +69,20 @@ function ordenarGrupos(a: string, b: string) {
 function limpiarValor(valor: string) {
   const limpio = valor.trim();
   return limpio.length > 0 ? limpio : null;
+}
+
+const MUNDIAL_START_AT = new Date("2026-06-11T21:00:00+02:00");
+
+function estanClasificadosBloqueados() {
+  return new Date() >= MUNDIAL_START_AT;
+}
+
+function textoFechaBloqueo() {
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "Europe/Madrid",
+  }).format(MUNDIAL_START_AT);
 }
 
 function construirGrupos(partidos: PartidoRow[]) {
@@ -148,6 +163,8 @@ export default function GruposPage() {
   const hayPronosticosGuardados = useMemo(() => {
     return Object.values(pronosticos).some((pronostico) => Boolean(pronostico.id));
   }, [pronosticos]);
+
+  const clasificadosBloqueados = estanClasificadosBloqueados();
 
   useEffect(() => {
     let activo = true;
@@ -240,6 +257,11 @@ export default function GruposPage() {
     setMensaje(null);
     setError(null);
 
+    if (clasificadosBloqueados) {
+      setError("Los clasificados de grupo ya están bloqueados porque el Mundial ha comenzado.");
+      return;
+    }
+
     setPronosticos((actual) => ({
       ...actual,
       [grupo]: {
@@ -254,6 +276,12 @@ export default function GruposPage() {
   async function guardarGrupos() {
     if (!participanteId) {
       setError("No se ha podido identificar tu usuario.");
+      return;
+    }
+
+    if (clasificadosBloqueados) {
+      setMensaje(null);
+      setError("Los clasificados de grupo ya están bloqueados desde el inicio del Mundial. No se pueden modificar.");
       return;
     }
 
@@ -429,7 +457,13 @@ export default function GruposPage() {
                 También importa el orden: acertarlo puede darte puntos extra.
               </p>
 
-              {hayPronosticosGuardados && (
+              {clasificadosBloqueados && (
+                <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100">
+                  Clasificados de grupo bloqueados desde {textoFechaBloqueo()}. Ya no se pueden modificar.
+                </div>
+              )}
+
+              {!clasificadosBloqueados && hayPronosticosGuardados && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-200">
                   <CheckCircle2 className="h-4 w-4" />
                   Clasificados guardados. Puedes actualizarlos mientras estén abiertos.
@@ -549,7 +583,8 @@ export default function GruposPage() {
                           event.target.value
                         )
                       }
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-blue-300"
+                      disabled={clasificadosBloqueados}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="">Selecciona</option>
                       {grupo.selecciones.map((seleccion) => (
@@ -574,7 +609,8 @@ export default function GruposPage() {
                           event.target.value
                         )
                       }
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-blue-300"
+                      disabled={clasificadosBloqueados}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="">Selecciona</option>
                       {grupo.selecciones.map((seleccion) => (
@@ -609,39 +645,50 @@ export default function GruposPage() {
                 <div className="flex items-center gap-2 text-blue-200">
                   <ShieldCheck className="h-5 w-5" />
                   <h2 className="text-lg font-black">
-                    {hayPronosticosGuardados
+                    {clasificadosBloqueados
+                      ? "Clasificados cerrados"
+                      : hayPronosticosGuardados
                       ? "Actualizar clasificados"
                       : "Guardar clasificados"}
                   </h2>
                 </div>
 
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  {hayPronosticosGuardados
+                  {clasificadosBloqueados
+                    ? "Los clasificados de grupo quedaron bloqueados al comenzar el Mundial. Puedes consultar tus elecciones, pero ya no es posible modificarlas."
+                    : hayPronosticosGuardados
                     ? "Tus clasificados ya están guardados. Puedes modificarlos mientras estén abiertos."
                     : "Guarda tus clasificados antes del inicio del Mundial."}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={guardarGrupos}
-                disabled={guardando || grupos.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-blue-950/30 transition hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {guardando ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {hayPronosticosGuardados ? "Actualizando" : "Guardando"}
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    {hayPronosticosGuardados
-                      ? "Actualizar clasificados"
-                      : "Guardar clasificados"}
-                  </>
-                )}
-              </button>
+              {clasificadosBloqueados ? (
+                <div className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700/80 px-5 py-3 text-sm font-black text-slate-300 shadow-lg shadow-slate-950/30">
+                  <Lock className="h-4 w-4" />
+                  Cerrado
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={guardarGrupos}
+                  disabled={guardando || grupos.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-blue-950/30 transition hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {guardando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {hayPronosticosGuardados ? "Actualizando" : "Guardando"}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      {hayPronosticosGuardados
+                        ? "Actualizar clasificados"
+                        : "Guardar clasificados"}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </section>
         </section>

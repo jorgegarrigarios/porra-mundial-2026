@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  BarChart3,
   ClipboardCheck,
   CreditCard,
   Loader2,
@@ -277,6 +278,12 @@ export default function AdminHomePage() {
       desc: "Introduce resultados y recalcula V1.2.",
       href: "/admin/resultados",
       icon: Trophy,
+    },
+    {
+      title: "Standings Mundial 2026",
+      desc: "Importa clasificados oficiales y recalcula puntos de grupos.",
+      href: "/admin/standings",
+      icon: BarChart3,
     },
     {
       title: "Importar partidos",
