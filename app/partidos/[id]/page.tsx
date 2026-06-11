@@ -41,7 +41,6 @@ type ParticipanteSimple = {
   id: number;
   nombre: string | null;
   nickname?: string | null;
-  email?: string | null;
 };
 
 type Pronostico = {
@@ -50,6 +49,9 @@ type Pronostico = {
   goles_local: number | null;
   goles_visitante: number | null;
   puntos: number | null;
+  tipo_pronostico: string | null;
+  signo_grupo: string | null;
+  clasificado_pronosticado: string | null;
   participantes:
     | ParticipanteSimple
     | ParticipanteSimple[]
@@ -62,13 +64,10 @@ type LigaUsuario = {
 };
 
 type LigaParticipanteRow = {
-  liga_id?: number | null;
-  liga?: number | null;
-  participante_id?: number | null;
-  participante?: number | null;
-  estado?: string | null;
-  aprobado?: boolean | null;
-  aceptado?: boolean | null;
+  id: number;
+  liga_id: number;
+  participante_id: number;
+  created_at?: string | null;
 };
 
 function obtenerNombreVisible(participante: ParticipanteSimple | null | undefined) {
@@ -77,28 +76,8 @@ function obtenerNombreVisible(participante: ParticipanteSimple | null | undefine
   return (
     participante.nickname?.trim() ||
     participante.nombre?.trim() ||
-    participante.email?.trim() ||
     "Participante"
   );
-}
-
-function estaAprobadoEnLiga(row: LigaParticipanteRow) {
-  if (typeof row.aprobado === "boolean") return row.aprobado;
-  if (typeof row.aceptado === "boolean") return row.aceptado;
-
-  const estado = row.estado?.trim().toLowerCase();
-
-  if (!estado) return true;
-
-  return ["aprobado", "aceptado", "activo", "pagado"].includes(estado);
-}
-
-function obtenerLigaId(row: LigaParticipanteRow) {
-  return row.liga_id ?? row.liga ?? null;
-}
-
-function obtenerParticipanteId(row: LigaParticipanteRow) {
-  return row.participante_id ?? row.participante ?? null;
 }
 
 export default function PartidoDetallePage() {
@@ -108,7 +87,6 @@ export default function PartidoDetallePage() {
   const [partido, setPartido] = useState<Partido | null>(null);
   const [pronosticos, setPronosticos] = useState<Pronostico[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [participanteId, setParticipanteId] = useState<number | null>(null);
   const [ligasUsuario, setLigasUsuario] = useState<LigaUsuario[]>([]);
   const [ligaSeleccionadaId, setLigaSeleccionadaId] = useState<number | null>(null);
   const [participantesLigaIds, setParticipantesLigaIds] = useState<number[]>([]);
@@ -116,12 +94,14 @@ export default function PartidoDetallePage() {
 
   useEffect(() => {
     cargarDetalle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (partido && ligaSeleccionadaId) {
       cargarPronosticosDeLiga(partido, ligaSeleccionadaId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ligaSeleccionadaId]);
 
   async function cargarDetalle() {
@@ -129,7 +109,6 @@ export default function PartidoDetallePage() {
     setErrorLiga(null);
 
     const participanteActual = await obtenerParticipanteActual();
-    setParticipanteId(participanteActual?.id ?? null);
 
     const { data: partidoData, error: partidoError } = await supabase
       .from("partidos")
@@ -149,6 +128,7 @@ export default function PartidoDetallePage() {
 
     if (!participanteActual?.id) {
       setPronosticos([]);
+      setErrorLiga("No se ha podido identificar tu usuario.");
       setCargando(false);
       return;
     }
@@ -174,47 +154,22 @@ export default function PartidoDetallePage() {
   }
 
   async function cargarLigasDelUsuario(idParticipante: number) {
-    const intentos = [
-      {
-        tabla: "liga_participantes",
-        campoParticipante: "participante_id",
-        campoLiga: "liga_id",
-      },
-      {
-        tabla: "ligas_participantes",
-        campoParticipante: "participante_id",
-        campoLiga: "liga_id",
-      },
-      {
-        tabla: "liga_participantes",
-        campoParticipante: "participante",
-        campoLiga: "liga",
-      },
-      {
-        tabla: "ligas_participantes",
-        campoParticipante: "participante",
-        campoLiga: "liga",
-      },
-    ];
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("participante_id", idParticipante);
 
-    let filas: LigaParticipanteRow[] = [];
-
-    for (const intento of intentos) {
-      const { data, error } = await supabase
-        .from(intento.tabla)
-        .select("*")
-        .eq(intento.campoParticipante, idParticipante);
-
-      if (!error && data) {
-        filas = (data as LigaParticipanteRow[]).filter(estaAprobadoEnLiga);
-        break;
-      }
+    if (relacionesError) {
+      console.error("Error cargando ligas del usuario:", relacionesError.message);
+      return [];
     }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
 
     const idsLigas = Array.from(
       new Set(
-        filas
-          .map((fila) => obtenerLigaId(fila))
+        relaciones
+          .map((fila) => fila.liga_id)
           .filter((ligaId): ligaId is number => typeof ligaId === "number")
       )
     );
@@ -230,7 +185,7 @@ export default function PartidoDetallePage() {
       .order("nombre", { ascending: true });
 
     if (ligasError) {
-      console.error("Error cargando ligas del usuario:", ligasError.message);
+      console.error("Error cargando datos de ligas:", ligasError.message);
 
       return idsLigas.map((ligaId) => ({
         id: ligaId,
@@ -245,43 +200,22 @@ export default function PartidoDetallePage() {
   }
 
   async function cargarParticipantesDeLiga(ligaId: number) {
-    const intentos = [
-      {
-        tabla: "liga_participantes",
-        campoLiga: "liga_id",
-      },
-      {
-        tabla: "ligas_participantes",
-        campoLiga: "liga_id",
-      },
-      {
-        tabla: "liga_participantes",
-        campoLiga: "liga",
-      },
-      {
-        tabla: "ligas_participantes",
-        campoLiga: "liga",
-      },
-    ];
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("liga_id", ligaId);
 
-    let filas: LigaParticipanteRow[] = [];
-
-    for (const intento of intentos) {
-      const { data, error } = await supabase
-        .from(intento.tabla)
-        .select("*")
-        .eq(intento.campoLiga, ligaId);
-
-      if (!error && data) {
-        filas = (data as LigaParticipanteRow[]).filter(estaAprobadoEnLiga);
-        break;
-      }
+    if (relacionesError) {
+      console.error("Error cargando participantes de liga:", relacionesError.message);
+      return [];
     }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
 
     return Array.from(
       new Set(
-        filas
-          .map((fila) => obtenerParticipanteId(fila))
+        relaciones
+          .map((fila) => fila.participante_id)
           .filter(
             (idParticipante): idParticipante is number =>
               typeof idParticipante === "number"
@@ -313,7 +247,7 @@ export default function PartidoDetallePage() {
 
     if (idsParticipantesLiga.length === 0) {
       setPronosticos([]);
-      setErrorLiga("No se han encontrado participantes aprobados en esta liga.");
+      setErrorLiga("No se han encontrado participantes en esta liga.");
       return;
     }
 
@@ -326,11 +260,13 @@ export default function PartidoDetallePage() {
         goles_local,
         goles_visitante,
         puntos,
+        tipo_pronostico,
+        signo_grupo,
+        clasificado_pronosticado,
         participantes (
           id,
           nombre,
-          nickname,
-          email
+          nickname
         )
       `
       )
@@ -383,17 +319,86 @@ export default function PartidoDetallePage() {
     return obtenerNombreVisible(getParticipante(pronostico));
   }
 
+  function esFaseGrupos() {
+    return partido?.fase?.trim().toLowerCase() === "fase de grupos";
+  }
+
+  function normalizarSigno(valor: string | null) {
+    const limpio = valor?.trim().toUpperCase() ?? "";
+
+    if (limpio === "1" || limpio === "X" || limpio === "2") {
+      return limpio;
+    }
+
+    return "";
+  }
+
+  function obtenerSignoPronostico(pronostico: Pronostico) {
+    if (esFaseGrupos()) {
+      return normalizarSigno(pronostico.signo_grupo);
+    }
+
+    if (pronostico.goles_local === null || pronostico.goles_visitante === null) {
+      return "";
+    }
+
+    if (pronostico.goles_local > pronostico.goles_visitante) return "1";
+    if (pronostico.goles_local < pronostico.goles_visitante) return "2";
+    return "X";
+  }
+
+  function obtenerTextoPronostico(pronostico: Pronostico) {
+    if (esFaseGrupos()) {
+      const signo = normalizarSigno(pronostico.signo_grupo);
+
+      if (signo === "1") return `Gana ${partido?.local ?? "local"}`;
+      if (signo === "X") return "Empate";
+      if (signo === "2") return `Gana ${partido?.visitante ?? "visitante"}`;
+
+      return "Sin pronóstico";
+    }
+
+    if (pronostico.goles_local === null || pronostico.goles_visitante === null) {
+      return "Sin pronóstico";
+    }
+
+    const marcador = `${partido?.local ?? "Local"} ${pronostico.goles_local} - ${
+      pronostico.goles_visitante
+    } ${partido?.visitante ?? "Visitante"}`;
+
+    if (
+      pronostico.goles_local === pronostico.goles_visitante &&
+      pronostico.clasificado_pronosticado
+    ) {
+      return `${marcador} · Pasa ${pronostico.clasificado_pronosticado}`;
+    }
+
+    return marcador;
+  }
+
+  function obtenerResumenCortoPronostico(pronostico: Pronostico) {
+    if (esFaseGrupos()) {
+      return normalizarSigno(pronostico.signo_grupo) || "-";
+    }
+
+    if (pronostico.goles_local === null || pronostico.goles_visitante === null) {
+      return "-";
+    }
+
+    return `${pronostico.goles_local} - ${pronostico.goles_visitante}`;
+  }
+
   function calcularTendencia() {
     let local = 0;
     let empate = 0;
     let visitante = 0;
 
     pronosticos.forEach((p) => {
-      if (p.goles_local === null || p.goles_visitante === null) return;
+      const signo = obtenerSignoPronostico(p);
 
-      if (p.goles_local > p.goles_visitante) local++;
-      else if (p.goles_local < p.goles_visitante) visitante++;
-      else empate++;
+      if (signo === "1") local++;
+      else if (signo === "2") visitante++;
+      else if (signo === "X") empate++;
     });
 
     const total = local + empate + visitante;
@@ -483,8 +488,18 @@ export default function PartidoDetallePage() {
               {formatearHora(partido.fecha_inicio)}
             </div>
 
-            <div className={`statusBadge ${finalizado ? "finished" : partidoEmpezado ? "closed" : "pending"}`}>
-              {finalizado ? <CheckCircle2 size={16} /> : partidoEmpezado ? <Lock size={16} /> : <Clock size={16} />}
+            <div
+              className={`statusBadge ${
+                finalizado ? "finished" : partidoEmpezado ? "closed" : "pending"
+              }`}
+            >
+              {finalizado ? (
+                <CheckCircle2 size={16} />
+              ) : partidoEmpezado ? (
+                <Lock size={16} />
+              ) : (
+                <Clock size={16} />
+              )}
               {finalizado ? "Finalizado" : partidoEmpezado ? "Cerrado" : "Pendiente"}
             </div>
           </div>
@@ -494,7 +509,11 @@ export default function PartidoDetallePage() {
 
             <div className="scoreBox">
               <p className="scoreLabel">
-                {finalizado ? "Resultado final" : partidoEmpezado ? "Partido cerrado" : "Próximo partido"}
+                {finalizado
+                  ? "Resultado final"
+                  : partidoEmpezado
+                  ? "Partido cerrado"
+                  : "Próximo partido"}
               </p>
 
               <p className="score">
@@ -544,7 +563,7 @@ export default function PartidoDetallePage() {
             <h2>{ligaSeleccionada?.nombre ?? "Sin liga seleccionada"}</h2>
             <p>
               Las tendencias y pronósticos se calculan solo con los participantes
-              aprobados de esta liga.
+              de esta liga.
             </p>
           </div>
 
@@ -618,6 +637,10 @@ export default function PartidoDetallePage() {
             />
             <InfoRow label="Estadio" value={partido.estadio ?? "Pendiente"} />
             <InfoRow label="Ciudad" value={partido.ciudad ?? "Pendiente"} />
+            <InfoRow
+              label="Participantes liga"
+              value={participantesLigaIds.length.toString()}
+            />
           </section>
         </div>
 
@@ -661,13 +684,12 @@ export default function PartidoDetallePage() {
                     <div>
                       <p className="predictionName">{nombre}</p>
                       <p className="predictionText">
-                        {partido.local} {p.goles_local} - {p.goles_visitante}{" "}
-                        {partido.visitante}
+                        {obtenerTextoPronostico(p)}
                       </p>
                     </div>
 
                     <div className="predictionScore">
-                      {p.goles_local} - {p.goles_visitante}
+                      {obtenerResumenCortoPronostico(p)}
                     </div>
 
                     <div className="pointsBadge">{p.puntos ?? 0} pts</div>
