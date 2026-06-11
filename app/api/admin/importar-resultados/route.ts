@@ -67,69 +67,162 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ESTADOS_FINALIZADOS = new Set(["FT", "AET", "PEN"]);
 
 const ALIAS_EQUIPOS: Record<string, string> = {
+  algeria: "argelia",
+  argelia: "argelia",
+
   argentina: "argentina",
+
   australia: "australia",
+
   austria: "austria",
+
   belgium: "belgica",
   bélgica: "belgica",
   belgica: "belgica",
+
+  "bosnia and herzegovina": "bosnia y herzegovina",
+  "bosnia & herzegovina": "bosnia y herzegovina",
+  "bosnia herzegovina": "bosnia y herzegovina",
+  bosnia: "bosnia y herzegovina",
+  "bosnia y herzegovina": "bosnia y herzegovina",
+
   brazil: "brasil",
   brasil: "brasil",
+
+  "cape verde": "cabo verde",
+  "cape verde islands": "cabo verde",
+  "cabo verde": "cabo verde",
+
   canada: "canada",
   canadá: "canada",
+
   colombia: "colombia",
+
   croatia: "croacia",
   croacia: "croacia",
-  denmark: "dinamarca",
-  dinamarca: "dinamarca",
+
+  curacao: "curazao",
+  curaçao: "curazao",
+  curazao: "curazao",
+
+  "czech republic": "chequia",
+  czechia: "chequia",
+  czech: "chequia",
+  chequia: "chequia",
+
+  "congo dr": "rd congo",
+  "dr congo": "rd congo",
+  congo: "rd congo",
+  "rd congo": "rd congo",
+
   ecuador: "ecuador",
+
+  egypt: "egipto",
+  egipto: "egipto",
+
   england: "inglaterra",
   inglaterra: "inglaterra",
+
   france: "francia",
   francia: "francia",
+
   germany: "alemania",
   alemania: "alemania",
+
   ghana: "ghana",
+
+  haiti: "haiti",
+  haití: "haiti",
+
   iran: "iran",
   irán: "iran",
+
+  iraq: "irak",
+  irak: "irak",
+
+  "ivory coast": "costa de marfil",
+  ivory: "costa de marfil",
+  "costa de marfil": "costa de marfil",
+
   japan: "japon",
   japón: "japon",
   japon: "japon",
+
+  jordan: "jordania",
+  jordania: "jordania",
+
   mexico: "mexico",
   méxico: "mexico",
-  marruecos: "marruecos",
+
   morocco: "marruecos",
+  marruecos: "marruecos",
+
   netherlands: "paises bajos",
   holland: "paises bajos",
   "paises bajos": "paises bajos",
   "países bajos": "paises bajos",
+
   "new zealand": "nueva zelanda",
   "nueva zelanda": "nueva zelanda",
+
   norway: "noruega",
   noruega: "noruega",
+
+  panama: "panama",
+  panamá: "panama",
+
   paraguay: "paraguay",
+
   portugal: "portugal",
-  qatar: "qatar",
+
+  qatar: "catar",
+  catar: "catar",
+
   "saudi arabia": "arabia saudi",
   "arabia saudí": "arabia saudi",
   "arabia saudi": "arabia saudi",
+
+  scotland: "escocia",
+  escocia: "escocia",
+
   senegal: "senegal",
-  serbia: "serbia",
+
+  "south africa": "sudafrica",
+  sudafrica: "sudafrica",
+  sudáfrica: "sudafrica",
+
   "south korea": "corea del sur",
   "korea republic": "corea del sur",
   "corea del sur": "corea del sur",
+
   spain: "espana",
   españa: "espana",
   espana: "espana",
+
+  sweden: "suecia",
+  suecia: "suecia",
+
   switzerland: "suiza",
   suiza: "suiza",
+
   tunisia: "tunez",
   túnez: "tunez",
   tunez: "tunez",
+
+  turkey: "turquia",
+  turkiye: "turquia",
+  türkiye: "turquia",
+  turquía: "turquia",
+  turquia: "turquia",
+
   uruguay: "uruguay",
+
   usa: "estados unidos",
   "united states": "estados unidos",
   "estados unidos": "estados unidos",
+
+  uzbekistan: "uzbekistan",
+  uzbekistán: "uzbekistan",
 };
 
 function crearSupabaseConUsuario(accessToken: string) {
