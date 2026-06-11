@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  BarChart3,
   ClipboardCheck,
   CreditCard,
   Loader2,
@@ -280,13 +279,6 @@ export default function AdminHomePage() {
       icon: Trophy,
     },
     {
-      title: "Standings Mundial 2026",
-      desc: "Importa clasificados oficiales y recalcula puntos de grupos.",
-      href: "/admin/standings",
-      icon: BarChart3,
-      featured: true,
-    },
-    {
       title: "Importar partidos",
       desc: "Carga o actualiza calendario y partidos.",
       href: "/admin/importar-partidos",
@@ -363,7 +355,7 @@ export default function AdminHomePage() {
           </div>
           <div>
             <h1>Panel Admin</h1>
-            <p>Centro de control de resultados, standings, bonus, pagos y ligas.</p>
+            <p>Centro de control de la Porra Mundial.</p>
           </div>
         </div>
 
@@ -407,11 +399,7 @@ export default function AdminHomePage() {
             const Icon = card.icon;
 
             return (
-              <Link
-                key={card.href}
-                href={card.href}
-                className={`card ${"featured" in card && card.featured ? "featuredCard" : ""}`}
-              >
+              <Link key={card.href} href={card.href} className="card">
                 <div className="cardIcon">
                   <Icon size={28} />
                 </div>
@@ -525,26 +513,11 @@ export default function AdminHomePage() {
           padding:28px;
           transition:.2s ease;
           min-height:230px;
-          display:flex;
-          flex-direction:column;
         }
 
         .card:hover{
           transform:translateY(-3px);
           border-color:rgba(96,165,250,.35);
-          box-shadow:0 22px 70px rgba(37,99,235,.16);
-        }
-
-        .featuredCard{
-          background:
-            radial-gradient(circle at top right, rgba(37,99,235,.28), transparent 42%),
-            linear-gradient(145deg,rgba(30,64,175,.58),rgba(15,23,42,.72));
-          border-color:rgba(96,165,250,.42);
-        }
-
-        .featuredCard .cardIcon{
-          background:rgba(59,130,246,.24);
-          color:#dbeafe;
         }
 
         .cardIcon{
@@ -571,11 +544,6 @@ export default function AdminHomePage() {
           line-height:1.6;
           margin:10px 0 20px;
           font-weight:650;
-          flex:1;
-        }
-
-        .featuredCard p{
-          color:#dbeafe;
         }
 
         .cta{
@@ -584,7 +552,6 @@ export default function AdminHomePage() {
           gap:8px;
           color:#bfdbfe;
           font-weight:900;
-          margin-top:auto;
         }
 
         @media(max-width:1180px){
@@ -620,36 +587,10 @@ export default function AdminHomePage() {
 
           .hero h1{
             font-size:40px;
-            line-height:.98;
-          }
-
-          .hero p{
-            line-height:1.45;
-          }
-
-          .alertPanel{
-            border-radius:24px;
-            padding:18px;
-          }
-
-          .alertPanel h2{
-            font-size:24px;
           }
 
           .card{
             min-height:auto;
-            border-radius:26px;
-            padding:22px;
-          }
-
-          .cardIcon{
-            width:56px;
-            height:56px;
-            border-radius:20px;
-          }
-
-          .card h2{
-            font-size:23px;
           }
         }
       `}</style>
