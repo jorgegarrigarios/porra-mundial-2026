@@ -390,108 +390,40 @@ export default function LigaDetallePage({ params }: Props) {
 
       setPagosLiga(pagosMap);
 
-      const [
-        { data: pronosticosData, error: pronosticosError },
-        { data: gruposData, error: gruposError },
-        { data: bonusData, error: bonusError },
-      ] = await Promise.all([
-        conTimeout(
-          idsMiembros.length > 0
-            ? supabase
-                .from("pronosticos")
-                .select("participante_id, puntos")
-                .in("participante_id", idsMiembros)
-            : supabase
-                .from("pronosticos")
-                .select("participante_id, puntos")
-                .eq("participante_id", -1),
-          10000,
-          "No se ha podido cargar el ranking de partidos."
-        ),
-        conTimeout(
-          idsMiembros.length > 0
-            ? supabase
-                .from("pronosticos_grupos")
-                .select("participante_id, puntos_total")
-                .in("participante_id", idsMiembros)
-            : supabase
-                .from("pronosticos_grupos")
-                .select("participante_id, puntos_total")
-                .eq("participante_id", -1),
-          10000,
-          "No se ha podido cargar el ranking de grupos."
-        ),
-        conTimeout(
-          idsMiembros.length > 0
-            ? supabase
-                .from("pronosticos_bonus")
-                .select("participante_id, puntos_total")
-                .in("participante_id", idsMiembros)
-            : supabase
-                .from("pronosticos_bonus")
-                .select("participante_id, puntos_total")
-                .eq("participante_id", -1),
-          10000,
-          "No se ha podido cargar el ranking de bonus."
-        ),
-      ]);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (pronosticosError || gruposError || bonusError) {
-        setError("No se ha podido cargar el ranking.");
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        setError("No se ha podido validar tu sesión para cargar el ranking.");
         return;
       }
 
-      const pronosticos = (pronosticosData ?? []) as PronosticoRow[];
-      const pronosticosGrupos = (gruposData ?? []) as PronosticoGrupoRow[];
-      const pronosticosBonus = (bonusData ?? []) as PronosticoBonusRow[];
+      const rankingResponse = await conTimeout(
+        fetch(`/api/ligas/${id}/ranking`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        }),
+        15000,
+        "No se ha podido cargar el ranking actualizado."
+      );
 
-      const rankingCalculado: MiembroRanking[] = miembros.map((miembro) => {
-        const nombreVisible = miembro.nickname || miembro.nombre || "Usuario";
+      const rankingJson = await rankingResponse.json().catch(() => null);
 
-        const puntosPartidos = sumarPuntosPorParticipante(
-          pronosticos,
-          miembro.id,
-          (p) => p.puntos
+      if (!rankingResponse.ok || !rankingJson?.ok) {
+        setError(
+          rankingJson?.error ??
+            "No se ha podido cargar el ranking actualizado."
         );
+        return;
+      }
 
-        const puntosGrupos = sumarPuntosPorParticipante(
-          pronosticosGrupos,
-          miembro.id,
-          (p) => p.puntos_total
-        );
-
-        const puntosBonus = sumarPuntosPorParticipante(
-          pronosticosBonus,
-          miembro.id,
-          (p) => p.puntos_total
-        );
-
-        const puntos = puntosPartidos + puntosGrupos + puntosBonus;
-
-        const aciertosPartidos = pronosticos.filter(
-          (p) => p.participante_id === miembro.id && (p.puntos ?? 0) > 0
-        ).length;
-
-        const aciertosGrupos = pronosticosGrupos.filter(
-          (p) => p.participante_id === miembro.id && (p.puntos_total ?? 0) > 0
-        ).length;
-
-        const aciertosBonus = pronosticosBonus.filter(
-          (p) => p.participante_id === miembro.id && (p.puntos_total ?? 0) > 0
-        ).length;
-
-        const aciertos = aciertosPartidos + aciertosGrupos + aciertosBonus;
-
-        return {
-          id: miembro.id,
-          nombre: nombreVisible,
-          puntos,
-          puntosPartidos,
-          puntosGrupos,
-          puntosBonus,
-          aciertos,
-        };
-      });
+      const rankingCalculado = (rankingJson.ranking ?? []) as MiembroRanking[];
 
       rankingCalculado.sort((a, b) => {
         if (b.puntos !== a.puntos) return b.puntos - a.puntos;
