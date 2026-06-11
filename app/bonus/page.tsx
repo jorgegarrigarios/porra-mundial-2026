@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarChart3,
   CheckCircle2,
   Crown,
+  Eye,
   Goal,
   GoalIcon,
   Loader2,
@@ -38,6 +40,36 @@ type BonusRow = {
   mejor_portero: string | null;
   seleccion_revelacion: string | null;
   seleccion_decepcion: string | null;
+  participantes?:
+    | {
+        id: number;
+        nombre: string | null;
+        nickname?: string | null;
+      }
+    | {
+        id: number;
+        nombre: string | null;
+        nickname?: string | null;
+      }[]
+    | null;
+};
+
+type LigaUsuario = {
+  id: number;
+  nombre: string;
+};
+
+type LigaParticipanteRow = {
+  id: number;
+  liga_id: number;
+  participante_id: number;
+  created_at?: string | null;
+};
+
+type TendenciaItem = {
+  valor: string;
+  cantidad: number;
+  porcentaje: number;
 };
 
 type PartidoRow = {
@@ -141,8 +173,29 @@ function normalizarEquipo(equipo: string | null) {
   return limpio;
 }
 
-function esFaseGrupos(fase: string | null) {
-  return fase?.trim().toLowerCase() === "fase de grupos";
+function valorVisible(valor: string | null | undefined) {
+  const limpio = valor?.trim();
+  return limpio && limpio.length > 0 ? limpio : "Sin elegir";
+}
+
+function obtenerParticipanteDeBonus(bonus: BonusRow) {
+  if (!bonus.participantes) return null;
+
+  if (Array.isArray(bonus.participantes)) {
+    return bonus.participantes[0] ?? null;
+  }
+
+  return bonus.participantes;
+}
+
+function obtenerNombreVisible(bonus: BonusRow) {
+  const participante = obtenerParticipanteDeBonus(bonus);
+
+  return (
+    participante?.nickname?.trim() ||
+    participante?.nombre?.trim() ||
+    `Participante ${bonus.participante_id}`
+  );
 }
 
 async function cargarJugadoresActivosPaginado() {
@@ -181,6 +234,57 @@ async function cargarJugadoresActivosPaginado() {
   };
 }
 
+function calcularTendencia(
+  bonusLiga: BonusRow[],
+  selector: (bonus: BonusRow) => string | null
+) {
+  const mapa = new Map<string, number>();
+
+  bonusLiga.forEach((bonus) => {
+    const valor = selector(bonus)?.trim();
+
+    if (!valor) return;
+
+    mapa.set(valor, (mapa.get(valor) || 0) + 1);
+  });
+
+  const total = Array.from(mapa.values()).reduce((acc, valor) => acc + valor, 0);
+
+  return Array.from(mapa.entries())
+    .map(([valor, cantidad]) => ({
+      valor,
+      cantidad,
+      porcentaje: total > 0 ? Math.round((cantidad / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.valor.localeCompare(b.valor, "es"))
+    .slice(0, 5);
+}
+
+function calcularTendenciaFinalistas(bonusLiga: BonusRow[]) {
+  const mapa = new Map<string, number>();
+
+  bonusLiga.forEach((bonus) => {
+    [bonus.finalista_1, bonus.finalista_2].forEach((valor) => {
+      const limpio = valor?.trim();
+
+      if (!limpio) return;
+
+      mapa.set(limpio, (mapa.get(limpio) || 0) + 1);
+    });
+  });
+
+  const total = Array.from(mapa.values()).reduce((acc, valor) => acc + valor, 0);
+
+  return Array.from(mapa.entries())
+    .map(([valor, cantidad]) => ({
+      valor,
+      cantidad,
+      porcentaje: total > 0 ? Math.round((cantidad / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.valor.localeCompare(b.valor, "es"))
+    .slice(0, 5);
+}
+
 export default function BonusPage() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -192,8 +296,39 @@ export default function BonusPage() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [ligasUsuario, setLigasUsuario] = useState<LigaUsuario[]>([]);
+  const [ligaSeleccionadaId, setLigaSeleccionadaId] = useState<number | null>(null);
+  const [participantesLigaIds, setParticipantesLigaIds] = useState<number[]>([]);
+  const [bonusLiga, setBonusLiga] = useState<BonusRow[]>([]);
+  const [errorLiga, setErrorLiga] = useState<string | null>(null);
+  const [cargandoLiga, setCargandoLiga] = useState(false);
+
   const bonusYaGuardados = Boolean(bonus.id);
   const bonusBloqueados = estanBonusBloqueados();
+
+  const ligaSeleccionada = useMemo(
+    () => ligasUsuario.find((liga) => liga.id === ligaSeleccionadaId) ?? null,
+    [ligasUsuario, ligaSeleccionadaId]
+  );
+
+  const tendencias = useMemo(
+    () => ({
+      campeon: calcularTendencia(bonusLiga, (item) => item.campeon),
+      finalistas: calcularTendenciaFinalistas(bonusLiga),
+      botaOro: calcularTendencia(bonusLiga, (item) => item.bota_oro),
+      mejorJugador: calcularTendencia(bonusLiga, (item) => item.mejor_jugador),
+      mejorPortero: calcularTendencia(bonusLiga, (item) => item.mejor_portero),
+      revelacion: calcularTendencia(
+        bonusLiga,
+        (item) => item.seleccion_revelacion
+      ),
+      decepcion: calcularTendencia(
+        bonusLiga,
+        (item) => item.seleccion_decepcion
+      ),
+    }),
+    [bonusLiga]
+  );
 
   const seleccionesRevelacion = useMemo(() => {
     return SELECCIONES_REVELACION.filter((seleccion) =>
@@ -232,6 +367,7 @@ export default function BonusPage() {
         setCargando(true);
         setError(null);
         setMensaje(null);
+        setErrorLiga(null);
 
         const participante = await obtenerParticipanteActual();
 
@@ -244,18 +380,21 @@ export default function BonusPage() {
 
         setParticipanteId(participante.id);
 
-        const [{ data: partidosData, error: partidosError }, jugadoresResultado, { data: bonusData, error: bonusError }] =
-          await Promise.all([
-            supabase.from("partidos").select("local, visitante, fase, grupo"),
-            cargarJugadoresActivosPaginado(),
-            supabase
-              .from("pronosticos_bonus")
-              .select(
-                "id, participante_id, campeon, finalista_1, finalista_2, bota_oro, mejor_jugador, mejor_portero, seleccion_revelacion, seleccion_decepcion"
-              )
-              .eq("participante_id", participante.id)
-              .maybeSingle(),
-          ]);
+        const [
+          { data: partidosData, error: partidosError },
+          jugadoresResultado,
+          { data: bonusData, error: bonusError },
+        ] = await Promise.all([
+          supabase.from("partidos").select("local, visitante, fase, grupo"),
+          cargarJugadoresActivosPaginado(),
+          supabase
+            .from("pronosticos_bonus")
+            .select(
+              "id, participante_id, campeon, finalista_1, finalista_2, bota_oro, mejor_jugador, mejor_portero, seleccion_revelacion, seleccion_decepcion"
+            )
+            .eq("participante_id", participante.id)
+            .maybeSingle(),
+        ]);
 
         if (!activo) return;
 
@@ -300,6 +439,21 @@ export default function BonusPage() {
             participante_id: participante.id,
           });
         }
+
+        if (bonusBloqueados) {
+          const ligas = await cargarLigasDelUsuario(participante.id);
+
+          if (!activo) return;
+
+          setLigasUsuario(ligas);
+
+          if (ligas.length > 0) {
+            setLigaSeleccionadaId(ligas[0].id);
+            await cargarBonusDeLiga(ligas[0].id);
+          } else {
+            setErrorLiga("No se ha encontrado ninguna liga asociada a tu usuario.");
+          }
+        }
       } catch (err) {
         console.error("Error cargando bonus:", err);
         if (activo) {
@@ -317,7 +471,138 @@ export default function BonusPage() {
     return () => {
       activo = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (bonusBloqueados && ligaSeleccionadaId) {
+      cargarBonusDeLiga(ligaSeleccionadaId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ligaSeleccionadaId]);
+
+  async function cargarLigasDelUsuario(idParticipante: number) {
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("participante_id", idParticipante);
+
+    if (relacionesError) {
+      console.error("Error cargando ligas del usuario:", relacionesError.message);
+      return [];
+    }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
+
+    const idsLigas = Array.from(
+      new Set(
+        relaciones
+          .map((fila) => fila.liga_id)
+          .filter((ligaId): ligaId is number => typeof ligaId === "number")
+      )
+    );
+
+    if (idsLigas.length === 0) {
+      return [];
+    }
+
+    const { data: ligasData, error: ligasError } = await supabase
+      .from("ligas")
+      .select("id, nombre")
+      .in("id", idsLigas)
+      .order("nombre", { ascending: true });
+
+    if (ligasError) {
+      console.error("Error cargando datos de ligas:", ligasError.message);
+
+      return idsLigas.map((ligaId) => ({
+        id: ligaId,
+        nombre: `Liga ${ligaId}`,
+      }));
+    }
+
+    return ((ligasData ?? []) as LigaUsuario[]).map((liga) => ({
+      id: liga.id,
+      nombre: liga.nombre || `Liga ${liga.id}`,
+    }));
+  }
+
+  async function cargarParticipantesDeLiga(ligaId: number) {
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("liga_id", ligaId);
+
+    if (relacionesError) {
+      console.error("Error cargando participantes de liga:", relacionesError.message);
+      return [];
+    }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
+
+    return Array.from(
+      new Set(
+        relaciones
+          .map((fila) => fila.participante_id)
+          .filter(
+            (idParticipante): idParticipante is number =>
+              typeof idParticipante === "number"
+          )
+      )
+    );
+  }
+
+  async function cargarBonusDeLiga(ligaId: number) {
+    try {
+      setCargandoLiga(true);
+      setErrorLiga(null);
+
+      const idsParticipantesLiga = await cargarParticipantesDeLiga(ligaId);
+
+      setParticipantesLigaIds(idsParticipantesLiga);
+
+      if (idsParticipantesLiga.length === 0) {
+        setBonusLiga([]);
+        setErrorLiga("No se han encontrado participantes en esta liga.");
+        return;
+      }
+
+      const { data: bonusData, error: bonusError } = await supabase
+        .from("pronosticos_bonus")
+        .select(
+          `
+          id,
+          participante_id,
+          campeon,
+          finalista_1,
+          finalista_2,
+          bota_oro,
+          mejor_jugador,
+          mejor_portero,
+          seleccion_revelacion,
+          seleccion_decepcion,
+          participantes (
+            id,
+            nombre,
+            nickname
+          )
+        `
+        )
+        .in("participante_id", idsParticipantesLiga)
+        .order("participante_id", { ascending: true });
+
+      if (bonusError) {
+        console.error("Error cargando bonus de liga:", bonusError.message);
+        setBonusLiga([]);
+        setErrorLiga("No se han podido cargar los bonus de esta liga.");
+        return;
+      }
+
+      setBonusLiga((bonusData ?? []) as BonusRow[]);
+    } finally {
+      setCargandoLiga(false);
+    }
+  }
 
   function actualizarSeleccion(campo: CampoSeleccion, valor: string) {
     setMensaje(null);
@@ -647,8 +932,176 @@ export default function BonusPage() {
             </div>
           </section>
         </section>
+
+        {bonusBloqueados && (
+          <section className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-300/30 bg-blue-300/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
+                  <Eye className="h-3.5 w-3.5" />
+                  Bonus de la liga
+                </div>
+                <h2 className="text-2xl font-black sm:text-3xl">
+                  Tendencias y pronósticos de rivales
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Como los bonus ya están cerrados, puedes ver qué ha elegido tu liga.
+                </p>
+              </div>
+
+              {ligasUsuario.length > 1 && (
+                <select
+                  value={ligaSeleccionadaId ?? ""}
+                  onChange={(event) => setLigaSeleccionadaId(Number(event.target.value))}
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-black text-white outline-none"
+                >
+                  {ligasUsuario.map((liga) => (
+                    <option key={liga.id} value={liga.id}>
+                      {liga.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                Liga seleccionada
+              </p>
+              <p className="mt-1 text-xl font-black text-white">
+                {ligaSeleccionada?.nombre ?? "Sin liga seleccionada"}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-400">
+                {cargandoLiga
+                  ? "Cargando datos de la liga..."
+                  : `${bonusLiga.length} bonus guardados de ${participantesLigaIds.length} participantes de la liga.`}
+              </p>
+            </div>
+
+            {errorLiga && (
+              <div className="rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100">
+                {errorLiga}
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <TendenciaCard titulo="Campeón" items={tendencias.campeon} />
+              <TendenciaCard titulo="Finalistas" items={tendencias.finalistas} />
+              <TendenciaCard titulo="Bota de Oro" items={tendencias.botaOro} />
+              <TendenciaCard titulo="Mejor jugador" items={tendencias.mejorJugador} />
+              <TendenciaCard titulo="Mejor portero" items={tendencias.mejorPortero} />
+              <TendenciaCard titulo="Selección revelación" items={tendencias.revelacion} />
+              <TendenciaCard titulo="Selección decepción" items={tendencias.decepcion} />
+            </div>
+
+            <section className="rounded-3xl border border-white/10 bg-black/20 p-5">
+              <div className="mb-4 flex items-center gap-2 text-blue-200">
+                <Users className="h-5 w-5" />
+                <h3 className="text-xl font-black">Pronósticos de la liga</h3>
+              </div>
+
+              {bonusLiga.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm font-bold text-slate-300">
+                  No hay bonus guardados todavía en esta liga.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {bonusLiga.map((item) => (
+                    <article
+                      key={item.id ?? item.participante_id}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                    >
+                      <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-sm font-black text-slate-950">
+                          {obtenerNombreVisible(item).charAt(0).toUpperCase()}
+                        </div>
+                        <h4 className="text-lg font-black">
+                          {obtenerNombreVisible(item)}
+                        </h4>
+                      </div>
+
+                      <div className="grid gap-2 text-sm sm:grid-cols-2">
+                        <DatoBonus label="Campeón" value={valorVisible(item.campeon)} />
+                        <DatoBonus
+                          label="Finalistas"
+                          value={`${valorVisible(item.finalista_1)} · ${valorVisible(
+                            item.finalista_2
+                          )}`}
+                        />
+                        <DatoBonus label="Bota de Oro" value={valorVisible(item.bota_oro)} />
+                        <DatoBonus
+                          label="Mejor jugador"
+                          value={valorVisible(item.mejor_jugador)}
+                        />
+                        <DatoBonus
+                          label="Mejor portero"
+                          value={valorVisible(item.mejor_portero)}
+                        />
+                        <DatoBonus
+                          label="Revelación"
+                          value={valorVisible(item.seleccion_revelacion)}
+                        />
+                        <DatoBonus
+                          label="Decepción"
+                          value={valorVisible(item.seleccion_decepcion)}
+                        />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function TendenciaCard({ titulo, items }: { titulo: string; items: TendenciaItem[] }) {
+  return (
+    <section className="rounded-3xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-4 flex items-center gap-2 text-blue-200">
+        <BarChart3 className="h-5 w-5" />
+        <h3 className="text-lg font-black">{titulo}</h3>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-slate-400">
+          Sin datos suficientes.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div key={`${titulo}-${item.valor}`}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-sm font-bold text-slate-200">
+                <span className="truncate">{item.valor}</span>
+                <strong className="shrink-0 text-blue-100">
+                  {item.cantidad} · {item.porcentaje}%
+                </strong>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-blue-400"
+                  style={{ width: `${item.porcentaje}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DatoBonus({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-black text-slate-100">{value}</p>
+    </div>
   );
 }
 

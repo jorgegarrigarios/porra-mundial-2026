@@ -405,17 +405,26 @@ export default function PartidoDetallePage() {
 
     if (total === 0) {
       return {
-        local: 0,
-        empate: 0,
-        visitante: 0,
+        local: { cantidad: 0, porcentaje: 0 },
+        empate: { cantidad: 0, porcentaje: 0 },
+        visitante: { cantidad: 0, porcentaje: 0 },
         total: 0,
       };
     }
 
     return {
-      local: Math.round((local / total) * 100),
-      empate: Math.round((empate / total) * 100),
-      visitante: Math.round((visitante / total) * 100),
+      local: {
+        cantidad: local,
+        porcentaje: Math.round((local / total) * 100),
+      },
+      empate: {
+        cantidad: empate,
+        porcentaje: Math.round((empate / total) * 100),
+      },
+      visitante: {
+        cantidad: visitante,
+        porcentaje: Math.round((visitante / total) * 100),
+      },
       total,
     };
   }
@@ -607,12 +616,18 @@ export default function PartidoDetallePage() {
 
                 <PredictionBar
                   label={`Gana ${partido.local}`}
-                  value={tendencia.local}
+                  value={tendencia.local.porcentaje}
+                  count={tendencia.local.cantidad}
                 />
-                <PredictionBar label="Empate" value={tendencia.empate} />
+                <PredictionBar
+                  label="Empate"
+                  value={tendencia.empate.porcentaje}
+                  count={tendencia.empate.cantidad}
+                />
                 <PredictionBar
                   label={`Gana ${partido.visitante}`}
-                  value={tendencia.visitante}
+                  value={tendencia.visitante.porcentaje}
+                  count={tendencia.visitante.cantidad}
                 />
               </>
             ) : (
@@ -722,12 +737,22 @@ function Team({ code, name }: { code: string | null; name: string }) {
   );
 }
 
-function PredictionBar({ label, value }: { label: string; value: number }) {
+function PredictionBar({
+  label,
+  value,
+  count,
+}: {
+  label: string;
+  value: number;
+  count: number;
+}) {
   return (
     <div className="barBlock">
       <div className="barHeader">
         <span>{label}</span>
-        <strong>{value}%</strong>
+        <strong>
+          {count} {count === 1 ? "usuario" : "usuarios"} · {value}%
+        </strong>
       </div>
 
       <div className="barTrack">
@@ -1043,8 +1068,14 @@ function Styles() {
       .barHeader {
         display: flex;
         justify-content: space-between;
+        gap: 14px;
         color: #cbd5e1;
         font-weight: 800;
+      }
+
+      .barHeader strong {
+        white-space: nowrap;
+        color: #dbeafe;
       }
 
       .barTrack {
@@ -1218,6 +1249,12 @@ function Styles() {
           width: 100%;
           box-sizing: border-box;
           border-radius: 18px;
+        }
+
+        .barHeader {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 5px;
         }
 
         .predictionRow {

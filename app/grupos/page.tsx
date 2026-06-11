@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarChart3,
   CheckCircle2,
+  Eye,
   Flag,
   Loader2,
   Lock,
@@ -24,6 +26,12 @@ type PartidoRow = {
   grupo: string | null;
 };
 
+type ParticipanteSimple = {
+  id: number;
+  nombre: string | null;
+  nickname?: string | null;
+};
+
 type PronosticoGrupoRow = {
   id?: number;
   participante_id: number;
@@ -31,6 +39,22 @@ type PronosticoGrupoRow = {
   clasificado_1: string | null;
   clasificado_2: string | null;
   puntos_total?: number | null;
+  participantes?:
+    | ParticipanteSimple
+    | ParticipanteSimple[]
+    | null;
+};
+
+type LigaUsuario = {
+  id: number;
+  nombre: string;
+};
+
+type LigaParticipanteRow = {
+  id: number;
+  liga_id: number;
+  participante_id: number;
+  created_at?: string | null;
 };
 
 type GrupoOpciones = {
@@ -39,6 +63,19 @@ type GrupoOpciones = {
 };
 
 type PronosticosPorGrupo = Record<string, PronosticoGrupoRow>;
+
+type TendenciaClasificado = {
+  seleccion: string;
+  cantidad: number;
+  porcentaje: number;
+};
+
+type PronosticosAgrupadosUsuario = {
+  participante_id: number;
+  nombre: string;
+  pronosticos: Record<string, PronosticoGrupoRow>;
+  puntos_total: number;
+};
 
 function normalizarEquipo(equipo: string | null) {
   const limpio = equipo?.trim();
@@ -69,6 +106,26 @@ function ordenarGrupos(a: string, b: string) {
 function limpiarValor(valor: string) {
   const limpio = valor.trim();
   return limpio.length > 0 ? limpio : null;
+}
+
+function obtenerParticipanteDePronostico(pronostico: PronosticoGrupoRow) {
+  if (!pronostico.participantes) return null;
+
+  if (Array.isArray(pronostico.participantes)) {
+    return pronostico.participantes[0] ?? null;
+  }
+
+  return pronostico.participantes;
+}
+
+function obtenerNombreVisible(pronostico: PronosticoGrupoRow) {
+  const participante = obtenerParticipanteDePronostico(pronostico);
+
+  return (
+    participante?.nickname?.trim() ||
+    participante?.nombre?.trim() ||
+    `Participante ${pronostico.participante_id}`
+  );
 }
 
 const MUNDIAL_START_AT = new Date("2026-06-11T21:00:00+02:00");
@@ -116,6 +173,67 @@ function construirGrupos(partidos: PartidoRow[]) {
     .sort((a, b) => ordenarGrupos(a.grupo, b.grupo));
 }
 
+function calcularTendenciasGrupo(
+  grupo: string,
+  pronosticosLiga: PronosticoGrupoRow[]
+) {
+  const pronosticosDelGrupo = pronosticosLiga.filter(
+    (pronostico) => pronostico.grupo === grupo
+  );
+
+  const mapa = new Map<string, number>();
+
+  pronosticosDelGrupo.forEach((pronostico) => {
+    [pronostico.clasificado_1, pronostico.clasificado_2].forEach((seleccion) => {
+      const limpio = seleccion?.trim();
+
+      if (!limpio) return;
+
+      mapa.set(limpio, (mapa.get(limpio) || 0) + 1);
+    });
+  });
+
+  const totalPronosticos = pronosticosDelGrupo.length;
+
+  return Array.from(mapa.entries())
+    .map(([seleccion, cantidad]) => ({
+      seleccion,
+      cantidad,
+      porcentaje:
+        totalPronosticos > 0 ? Math.round((cantidad / totalPronosticos) * 100) : 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.cantidad - a.cantidad || a.seleccion.localeCompare(b.seleccion, "es")
+    );
+}
+
+function agruparPronosticosPorUsuario(pronosticosLiga: PronosticoGrupoRow[]) {
+  const mapa = new Map<number, PronosticosAgrupadosUsuario>();
+
+  pronosticosLiga.forEach((pronostico) => {
+    if (!mapa.has(pronostico.participante_id)) {
+      mapa.set(pronostico.participante_id, {
+        participante_id: pronostico.participante_id,
+        nombre: obtenerNombreVisible(pronostico),
+        pronosticos: {},
+        puntos_total: 0,
+      });
+    }
+
+    const usuario = mapa.get(pronostico.participante_id);
+
+    if (!usuario) return;
+
+    usuario.pronosticos[pronostico.grupo] = pronostico;
+    usuario.puntos_total += pronostico.puntos_total ?? 0;
+  });
+
+  return Array.from(mapa.values()).sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es")
+  );
+}
+
 export default function GruposPage() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -124,6 +242,25 @@ export default function GruposPage() {
   const [pronosticos, setPronosticos] = useState<PronosticosPorGrupo>({});
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [ligasUsuario, setLigasUsuario] = useState<LigaUsuario[]>([]);
+  const [ligaSeleccionadaId, setLigaSeleccionadaId] = useState<number | null>(null);
+  const [participantesLigaIds, setParticipantesLigaIds] = useState<number[]>([]);
+  const [pronosticosLiga, setPronosticosLiga] = useState<PronosticoGrupoRow[]>([]);
+  const [errorLiga, setErrorLiga] = useState<string | null>(null);
+  const [cargandoLiga, setCargandoLiga] = useState(false);
+
+  const clasificadosBloqueados = estanClasificadosBloqueados();
+
+  const ligaSeleccionada = useMemo(
+    () => ligasUsuario.find((liga) => liga.id === ligaSeleccionadaId) ?? null,
+    [ligasUsuario, ligaSeleccionadaId]
+  );
+
+  const pronosticosUsuariosLiga = useMemo(
+    () => agruparPronosticosPorUsuario(pronosticosLiga),
+    [pronosticosLiga]
+  );
 
   const progreso = useMemo(() => {
     const total = grupos.length * 2;
@@ -164,8 +301,6 @@ export default function GruposPage() {
     return Object.values(pronosticos).some((pronostico) => Boolean(pronostico.id));
   }, [pronosticos]);
 
-  const clasificadosBloqueados = estanClasificadosBloqueados();
-
   useEffect(() => {
     let activo = true;
 
@@ -174,6 +309,7 @@ export default function GruposPage() {
         setCargando(true);
         setMensaje(null);
         setError(null);
+        setErrorLiga(null);
 
         const participante = await obtenerParticipanteActual();
 
@@ -230,6 +366,21 @@ export default function GruposPage() {
 
         setGrupos(gruposConstruidos);
         setPronosticos(iniciales);
+
+        if (clasificadosBloqueados) {
+          const ligas = await cargarLigasDelUsuario(participante.id);
+
+          if (!activo) return;
+
+          setLigasUsuario(ligas);
+
+          if (ligas.length > 0) {
+            setLigaSeleccionadaId(ligas[0].id);
+            await cargarPronosticosDeLiga(ligas[0].id);
+          } else {
+            setErrorLiga("No se ha encontrado ninguna liga asociada a tu usuario.");
+          }
+        }
       } catch (err) {
         console.error("Error cargando clasificados de grupo:", err);
         if (activo) {
@@ -247,7 +398,135 @@ export default function GruposPage() {
     return () => {
       activo = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (clasificadosBloqueados && ligaSeleccionadaId) {
+      cargarPronosticosDeLiga(ligaSeleccionadaId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ligaSeleccionadaId]);
+
+  async function cargarLigasDelUsuario(idParticipante: number) {
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("participante_id", idParticipante);
+
+    if (relacionesError) {
+      console.error("Error cargando ligas del usuario:", relacionesError.message);
+      return [];
+    }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
+
+    const idsLigas = Array.from(
+      new Set(
+        relaciones
+          .map((fila) => fila.liga_id)
+          .filter((ligaId): ligaId is number => typeof ligaId === "number")
+      )
+    );
+
+    if (idsLigas.length === 0) {
+      return [];
+    }
+
+    const { data: ligasData, error: ligasError } = await supabase
+      .from("ligas")
+      .select("id, nombre")
+      .in("id", idsLigas)
+      .order("nombre", { ascending: true });
+
+    if (ligasError) {
+      console.error("Error cargando datos de ligas:", ligasError.message);
+
+      return idsLigas.map((ligaId) => ({
+        id: ligaId,
+        nombre: `Liga ${ligaId}`,
+      }));
+    }
+
+    return ((ligasData ?? []) as LigaUsuario[]).map((liga) => ({
+      id: liga.id,
+      nombre: liga.nombre || `Liga ${liga.id}`,
+    }));
+  }
+
+  async function cargarParticipantesDeLiga(ligaId: number) {
+    const { data: relacionesData, error: relacionesError } = await supabase
+      .from("liga_participantes")
+      .select("id, liga_id, participante_id, created_at")
+      .eq("liga_id", ligaId);
+
+    if (relacionesError) {
+      console.error("Error cargando participantes de liga:", relacionesError.message);
+      return [];
+    }
+
+    const relaciones = (relacionesData ?? []) as LigaParticipanteRow[];
+
+    return Array.from(
+      new Set(
+        relaciones
+          .map((fila) => fila.participante_id)
+          .filter(
+            (idParticipante): idParticipante is number =>
+              typeof idParticipante === "number"
+          )
+      )
+    );
+  }
+
+  async function cargarPronosticosDeLiga(ligaId: number) {
+    try {
+      setCargandoLiga(true);
+      setErrorLiga(null);
+
+      const idsParticipantesLiga = await cargarParticipantesDeLiga(ligaId);
+
+      setParticipantesLigaIds(idsParticipantesLiga);
+
+      if (idsParticipantesLiga.length === 0) {
+        setPronosticosLiga([]);
+        setErrorLiga("No se han encontrado participantes en esta liga.");
+        return;
+      }
+
+      const { data: pronosticosData, error: pronosticosError } = await supabase
+        .from("pronosticos_grupos")
+        .select(
+          `
+          id,
+          participante_id,
+          grupo,
+          clasificado_1,
+          clasificado_2,
+          puntos_total,
+          participantes (
+            id,
+            nombre,
+            nickname
+          )
+        `
+        )
+        .in("participante_id", idsParticipantesLiga)
+        .order("participante_id", { ascending: true })
+        .order("grupo", { ascending: true });
+
+      if (pronosticosError) {
+        console.error("Error cargando clasificados de liga:", pronosticosError.message);
+        setPronosticosLiga([]);
+        setErrorLiga("No se han podido cargar los clasificados de esta liga.");
+        return;
+      }
+
+      setPronosticosLiga((pronosticosData ?? []) as PronosticoGrupoRow[]);
+    } finally {
+      setCargandoLiga(false);
+    }
+  }
 
   function actualizarPronostico(
     grupo: string,
@@ -692,8 +971,173 @@ export default function GruposPage() {
             </div>
           </section>
         </section>
+
+        {clasificadosBloqueados && (
+          <section className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-300/30 bg-blue-300/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
+                  <Eye className="h-3.5 w-3.5" />
+                  Clasificados de la liga
+                </div>
+                <h2 className="text-2xl font-black sm:text-3xl">
+                  Tendencias y pronósticos de rivales
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Como los clasificados ya están cerrados, puedes ver qué ha elegido tu liga.
+                </p>
+              </div>
+
+              {ligasUsuario.length > 1 && (
+                <select
+                  value={ligaSeleccionadaId ?? ""}
+                  onChange={(event) => setLigaSeleccionadaId(Number(event.target.value))}
+                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-black text-white outline-none"
+                >
+                  {ligasUsuario.map((liga) => (
+                    <option key={liga.id} value={liga.id}>
+                      {liga.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                Liga seleccionada
+              </p>
+              <p className="mt-1 text-xl font-black text-white">
+                {ligaSeleccionada?.nombre ?? "Sin liga seleccionada"}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-400">
+                {cargandoLiga
+                  ? "Cargando datos de la liga..."
+                  : `${pronosticosUsuariosLiga.length} usuarios con clasificados guardados de ${participantesLigaIds.length} participantes de la liga.`}
+              </p>
+            </div>
+
+            {errorLiga && (
+              <div className="rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100">
+                {errorLiga}
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {grupos.map((grupo) => (
+                <TendenciaGrupoCard
+                  key={grupo.grupo}
+                  grupo={grupo.grupo}
+                  items={calcularTendenciasGrupo(grupo.grupo, pronosticosLiga)}
+                />
+              ))}
+            </div>
+
+            <section className="rounded-3xl border border-white/10 bg-black/20 p-5">
+              <div className="mb-4 flex items-center gap-2 text-blue-200">
+                <Users className="h-5 w-5" />
+                <h3 className="text-xl font-black">Pronósticos de la liga</h3>
+              </div>
+
+              {pronosticosUsuariosLiga.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm font-bold text-slate-300">
+                  No hay clasificados guardados todavía en esta liga.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {pronosticosUsuariosLiga.map((usuario) => (
+                    <article
+                      key={usuario.participante_id}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-400 text-sm font-black text-slate-950">
+                            {usuario.nombre.charAt(0).toUpperCase()}
+                          </div>
+                          <h4 className="truncate text-lg font-black">
+                            {usuario.nombre}
+                          </h4>
+                        </div>
+
+                        <div className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-200">
+                          {usuario.puntos_total} pts
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {grupos.map((grupo) => {
+                          const pronostico = usuario.pronosticos[grupo.grupo];
+
+                          return (
+                            <div
+                              key={`${usuario.participante_id}-${grupo.grupo}`}
+                              className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3"
+                            >
+                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                Grupo {grupo.grupo}
+                              </p>
+                              <p className="mt-1 text-sm font-black text-slate-100">
+                                {pronostico?.clasificado_1 || "Sin elegir"}
+                              </p>
+                              <p className="text-sm font-black text-slate-300">
+                                {pronostico?.clasificado_2 || "Sin elegir"}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function TendenciaGrupoCard({
+  grupo,
+  items,
+}: {
+  grupo: string;
+  items: TendenciaClasificado[];
+}) {
+  return (
+    <section className="rounded-3xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-4 flex items-center gap-2 text-blue-200">
+        <BarChart3 className="h-5 w-5" />
+        <h3 className="text-lg font-black">Grupo {grupo}</h3>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-slate-400">
+          Sin datos suficientes.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div key={`${grupo}-${item.seleccion}`}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-sm font-bold text-slate-200">
+                <span className="truncate">{item.seleccion}</span>
+                <strong className="shrink-0 text-blue-100">
+                  {item.cantidad} · {item.porcentaje}%
+                </strong>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-blue-400"
+                  style={{ width: `${item.porcentaje}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
