@@ -189,8 +189,11 @@ function extraerResultadosGrupos(dataApi: FootballStandingsResponse) {
 
   return standings
     .map((grupoApi) => {
-      const nombreGrupo = traducirGrupo(grupoApi?.[0]?.group);
+      const nombreGrupoApi = grupoApi?.[0]?.group;
+      const nombreGrupo = traducirGrupo(nombreGrupoApi);
 
+      // API-FOOTBALL puede devolver un bloque extra "Group Stage"
+      // con mejores terceros. Ese bloque NO es un grupo A-L y se ignora.
       if (!nombreGrupo) return null;
 
       const ordenados = [...grupoApi].sort(
@@ -209,20 +212,48 @@ function extraerResultadosGrupos(dataApi: FootballStandingsResponse) {
         updated_at: ahora,
       };
     })
-    .filter((item): item is ResultadoGrupo => item !== null);
+    .filter((item): item is ResultadoGrupo => item !== null)
+    .sort((a, b) => a.grupo.localeCompare(b.grupo, "es"));
 }
 
-/*
-  PRUEBA TEMPORAL GET:
-  Sirve solo para comprobar en navegador que la ruta existe.
-  No guarda nada en Supabase.
-*/
+function obtenerGruposDetectados(dataApi: FootballStandingsResponse) {
+  const standings = dataApi.response?.[0]?.league?.standings;
+
+  if (!Array.isArray(standings)) return [];
+
+  return standings.map((grupoApi) => grupoApi?.[0]?.group ?? "Sin grupo");
+}
+
 export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    mensaje:
-      "Ruta importar-resultados-grupos operativa. Para guardar datos hay que llamar por POST desde el botón admin.",
-  });
+  try {
+    const dataApi = (await footballFetch(
+      "/standings?league=1&season=2026"
+    )) as FootballStandingsResponse;
+
+    const resultados = extraerResultadosGrupos(dataApi);
+
+    return NextResponse.json({
+      ok: true,
+      mensaje:
+        "Ruta importar-resultados-grupos operativa. Para guardar datos hay que llamar por POST desde el botón admin.",
+      debug: {
+        gruposDetectadosApi: obtenerGruposDetectados(dataApi),
+        gruposValidosDetectados: resultados.length,
+        resultados,
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error desconocido comprobando standings",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
@@ -264,12 +295,14 @@ export async function POST(request: Request) {
     }
 
     const resultados = extraerResultadosGrupos(dataApi);
+    const gruposDetectadosApi = obtenerGruposDetectados(dataApi);
 
     if (resultados.length !== 12) {
       return NextResponse.json(
         {
           ok: false,
-          error: `Se esperaban 12 grupos y se han detectado ${resultados.length}. No se ha guardado nada.`,
+          error: `Se esperaban 12 grupos válidos A-L y se han detectado ${resultados.length}. No se ha guardado nada.`,
+          gruposDetectadosApi,
           resultadosDetectados: resultados,
         },
         { status: 422 }
@@ -299,6 +332,7 @@ export async function POST(request: Request) {
       ok: true,
       resumen: {
         gruposProcesados: resultados.length,
+        gruposDetectadosApi,
         resultados,
       },
     });
