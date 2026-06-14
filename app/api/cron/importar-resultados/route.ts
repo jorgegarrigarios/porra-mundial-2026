@@ -60,6 +60,17 @@ type ActualizacionPartido = {
   api_fixture_id?: number | null;
 };
 
+type CronLogPayload = {
+  origen: string;
+  ok: boolean;
+  fixtures_encontrados: number;
+  mapeados: number;
+  actualizados: number;
+  ignorados: number;
+  pronosticos_actualizados: number;
+  errores: string | null;
+};
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -233,6 +244,23 @@ function crearSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+async function guardarCronLog(payload: CronLogPayload) {
+  try {
+    const supabaseAdmin = crearSupabaseAdmin();
+
+    const { error } = await supabaseAdmin.from("cron_logs").insert(payload);
+
+    if (error) {
+      console.error("Error guardando cron_logs:", error.message);
+    }
+  } catch (error) {
+    console.error(
+      "Error inesperado guardando cron_logs:",
+      error instanceof Error ? error.message : error
+    );
+  }
+}
+
 function normalizarTexto(valor: string | null | undefined) {
   const limpio = valor?.trim().toLowerCase() ?? "";
 
@@ -369,18 +397,27 @@ function crearActualizacion(
     return Object.keys(actualizacion).length > 0 ? actualizacion : null;
   }
 
-  const yaTieneResultado =
-    partido.resultado_local !== null && partido.resultado_visitante !== null;
+  /*
+    Blindaje importante:
+    Si API-Football marca el partido como finalizado (FT, AET o PEN),
+    el marcador definitivo debe ser la fuente de verdad aunque ya hubiera
+    un resultado previo guardado.
 
-  if (!yaTieneResultado) {
+    Esto evita que un marcador provisional o una corrección posterior de la API
+    se quede bloqueada para siempre.
+  */
+  if (
+    partido.resultado_local !== golesLocal ||
+    partido.resultado_visitante !== golesVisitante
+  ) {
     actualizacion.resultado_local = golesLocal;
     actualizacion.resultado_visitante = golesVisitante;
+  }
 
-    const clasificadoReal = obtenerClasificadoReal(fixture, partido);
+  const clasificadoReal = obtenerClasificadoReal(fixture, partido);
 
-    if (clasificadoReal) {
-      actualizacion.clasificado_real = clasificadoReal;
-    }
+  if (clasificadoReal && partido.clasificado_real !== clasificadoReal) {
+    actualizacion.clasificado_real = clasificadoReal;
   }
 
   return Object.keys(actualizacion).length > 0 ? actualizacion : null;
@@ -501,20 +538,48 @@ async function importarResultadosDesdeApi() {
 }
 
 export async function GET(request: Request) {
+  const origen = "vercel-cron";
+  const ejecutadoEn = new Date().toISOString();
+
   try {
     if (!validarCron(request)) {
+      await guardarCronLog({
+        origen,
+        ok: false,
+        fixtures_encontrados: 0,
+        mapeados: 0,
+        actualizados: 0,
+        ignorados: 0,
+        pronosticos_actualizados: 0,
+        errores: "No autorizado.",
+      });
+
       return NextResponse.json(
-        { ok: false, error: "No autorizado." },
+        { ok: false, error: "No autorizado.", origen, ejecutadoEn },
         { status: 401 }
       );
     }
 
     const resultado = await importarResultadosDesdeApi();
 
+    await guardarCronLog({
+      origen,
+      ok: resultado.ok,
+      fixtures_encontrados: resultado.resumen.fixturesEncontrados,
+      mapeados: resultado.resumen.mapeados,
+      actualizados: resultado.resumen.actualizados,
+      ignorados: resultado.resumen.ignorados,
+      pronosticos_actualizados: resultado.resumen.pronosticosActualizados,
+      errores:
+        resultado.errores && resultado.errores.length > 0
+          ? resultado.errores.join(" | ")
+          : null,
+    });
+
     return NextResponse.json({
       ...resultado,
-      origen: "vercel-cron",
-      ejecutadoEn: new Date().toISOString(),
+      origen,
+      ejecutadoEn,
     });
   } catch (error) {
     const message =
@@ -522,12 +587,23 @@ export async function GET(request: Request) {
         ? error.message
         : "Error desconocido ejecutando cron de resultados.";
 
+    await guardarCronLog({
+      origen,
+      ok: false,
+      fixtures_encontrados: 0,
+      mapeados: 0,
+      actualizados: 0,
+      ignorados: 0,
+      pronosticos_actualizados: 0,
+      errores: message,
+    });
+
     return NextResponse.json(
       {
         ok: false,
         error: message,
-        origen: "vercel-cron",
-        ejecutadoEn: new Date().toISOString(),
+        origen,
+        ejecutadoEn,
       },
       { status: 500 }
     );
