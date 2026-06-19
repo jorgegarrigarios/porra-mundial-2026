@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -82,7 +82,14 @@ type Participante = {
   role?: string | null;
 };
 
-type Filtro = "Todos" | "Pendientes" | "Guardados" | "Abiertos" | "Cerrados";
+type Filtro =
+  | "Próximos"
+  | "Sin guardar"
+  | "Guardados"
+  | "Abiertos"
+  | "Cerrados"
+  | "Finalizados"
+  | "Todos";
 
 type QueryResult<T> = {
   data: T | null;
@@ -90,11 +97,13 @@ type QueryResult<T> = {
 };
 
 const filtros: Filtro[] = [
-  "Todos",
-  "Pendientes",
+  "Próximos",
+  "Finalizados",
+  "Sin guardar",
   "Guardados",
   "Abiertos",
   "Cerrados",
+  "Todos",
 ];
 
 const TOTAL_BONUS = 8;
@@ -167,15 +176,46 @@ export default function MisPronosticosPage() {
     PronosticoGrupoResumen[]
   >([]);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroActivo, setFiltroActivo] = useState<Filtro>("Todos");
+  const [filtroActivo, setFiltroActivo] = useState<Filtro>("Próximos");
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [partidoDestacadoId, setPartidoDestacadoId] = useState<number | null>(null);
+  const scrollInicialRealizadoRef = useRef(false);
 
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  useEffect(() => {
+    if (cargando || partidos.length === 0 || scrollInicialRealizadoRef.current) return;
+    if (typeof window === "undefined") return;
+
+    const parametros = new URLSearchParams(window.location.search);
+    const partidoParametro = parametros.get("partido");
+    const partidoId = partidoParametro ? Number(partidoParametro) : null;
+
+    if (!partidoId || Number.isNaN(partidoId)) return;
+    if (!partidos.some((partido) => partido.id === partidoId)) return;
+
+    scrollInicialRealizadoRef.current = true;
+    setBusqueda("");
+    setFiltroActivo("Todos");
+    setPartidoDestacadoId(partidoId);
+
+    window.setTimeout(() => {
+      const elemento = document.getElementById(`partido-${partidoId}`);
+
+      if (elemento) {
+        elemento.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 180);
+
+    window.setTimeout(() => {
+      setPartidoDestacadoId(null);
+    }, 4500);
+  }, [cargando, partidos]);
 
   async function cargarDatos() {
     setCargando(true);
@@ -323,6 +363,68 @@ export default function MisPronosticosPage() {
     );
   }
 
+  function fechaValida(fechaInicio: string | null) {
+    if (!fechaInicio) return null;
+
+    const fecha = new Date(fechaInicio);
+
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return fecha;
+  }
+
+  function obtenerTimestamp(partido: Partido) {
+    return fechaValida(partido.fecha_inicio)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  }
+
+  function partidoAbierto(partido: Partido) {
+    return (
+      !partidoFinalizado(partido) &&
+      !partidoTieneEquiposPendientes(partido) &&
+      !partidoBloqueado(partido)
+    );
+  }
+
+  function obtenerPrioridadVisual(partido: Partido) {
+    if (partidoAbierto(partido)) return 0;
+    if (partidoTieneEquiposPendientes(partido)) return 2;
+    if (!partidoFinalizado(partido) && partidoBloqueado(partido)) return 3;
+    if (partidoFinalizado(partido)) return 4;
+    return 5;
+  }
+
+  function compararPartidosUX(a: Partido, b: Partido) {
+    const prioridadA = obtenerPrioridadVisual(a);
+    const prioridadB = obtenerPrioridadVisual(b);
+
+    if (prioridadA !== prioridadB) return prioridadA - prioridadB;
+
+    const fechaA = obtenerTimestamp(a);
+    const fechaB = obtenerTimestamp(b);
+
+    if (prioridadA === 4) return fechaB - fechaA;
+
+    return fechaA - fechaB;
+  }
+
+  function saltarAPartido(partidoId: number) {
+    setBusqueda("");
+    setFiltroActivo("Todos");
+    setPartidoDestacadoId(partidoId);
+
+    window.setTimeout(() => {
+      const elemento = document.getElementById(`partido-${partidoId}`);
+
+      if (elemento) {
+        elemento.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 120);
+
+    window.setTimeout(() => {
+      setPartidoDestacadoId(null);
+    }, 4000);
+  }
+
   function formatearFecha(fechaInicio: string | null) {
     if (!fechaInicio) return "Fecha pendiente";
 
@@ -385,32 +487,59 @@ export default function MisPronosticosPage() {
   const partidosFiltrados = useMemo(() => {
     const textoBusqueda = normalizarTexto(busqueda.trim());
 
-    return partidos.filter((partido) => {
-      const equiposPendientes = partidoTieneEquiposPendientes(partido);
-      const bloqueado = partidoBloqueado(partido);
-      const pronosticable = !equiposPendientes;
-      const guardado = Boolean(pronosticosGuardados[partido.id]);
+    return partidos
+      .filter((partido) => {
+        const equiposPendientes = partidoTieneEquiposPendientes(partido);
+        const bloqueado = partidoBloqueado(partido);
+        const finalizado = partidoFinalizado(partido);
+        const abierto = partidoAbierto(partido);
+        const guardado = Boolean(pronosticosGuardados[partido.id]);
 
-      const coincideBusqueda =
-        textoBusqueda === "" ||
-        normalizarTexto(partido.local).includes(textoBusqueda) ||
-        normalizarTexto(partido.visitante).includes(textoBusqueda) ||
-        normalizarTexto(partido.estadio ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.ciudad ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.fase ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.grupo ?? "").includes(textoBusqueda);
+        const coincideBusqueda =
+          textoBusqueda === "" ||
+          normalizarTexto(partido.local).includes(textoBusqueda) ||
+          normalizarTexto(partido.visitante).includes(textoBusqueda) ||
+          normalizarTexto(partido.estadio ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.ciudad ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.fase ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.grupo ?? "").includes(textoBusqueda);
 
-      if (!coincideBusqueda) return false;
+        if (!coincideBusqueda) return false;
 
-      if (filtroActivo === "Todos") return true;
-      if (filtroActivo === "Pendientes") return pronosticable && !guardado;
-      if (filtroActivo === "Guardados") return guardado;
-      if (filtroActivo === "Abiertos") return pronosticable && !bloqueado;
-      if (filtroActivo === "Cerrados") return bloqueado || equiposPendientes;
+        if (filtroActivo === "Próximos") return abierto;
+        if (filtroActivo === "Sin guardar") return abierto && !guardado;
+        if (filtroActivo === "Guardados") return guardado;
+        if (filtroActivo === "Abiertos") return abierto;
+        if (filtroActivo === "Cerrados") return (bloqueado || equiposPendientes) && !finalizado;
+        if (filtroActivo === "Finalizados") return finalizado;
+        if (filtroActivo === "Todos") return true;
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        // En el filtro Finalizados se prioriza lo último que ha ocurrido:
+        // partido finalizado más reciente primero y más lejano al final.
+        if (filtroActivo === "Finalizados") {
+          return obtenerTimestamp(b) - obtenerTimestamp(a);
+        }
+
+        return compararPartidosUX(a, b);
+      });
   }, [partidos, pronosticosGuardados, busqueda, filtroActivo]);
+
+  const proximoPartidoAbierto = useMemo(() => {
+    return [...partidos]
+      .filter((partido) => partidoAbierto(partido))
+      .sort((a, b) => obtenerTimestamp(a) - obtenerTimestamp(b))[0] ?? null;
+  }, [partidos]);
+
+  const primerPartidoSinGuardar = useMemo(() => {
+    return [...partidos]
+      .filter(
+        (partido) => partidoAbierto(partido) && !pronosticosGuardados[partido.id]
+      )
+      .sort((a, b) => obtenerTimestamp(a) - obtenerTimestamp(b))[0] ?? null;
+  }, [partidos, pronosticosGuardados]);
 
   const gruposMundial = useMemo(() => {
     return Array.from(
@@ -427,13 +556,17 @@ export default function MisPronosticosPage() {
     return partidos.filter((partido) => !partidoTieneEquiposPendientes(partido));
   }, [partidos]);
 
+  const partidosAbiertos = useMemo(() => {
+    return partidosPronosticables.filter((partido) => partidoAbierto(partido));
+  }, [partidosPronosticables]);
+
   const totalGuardados = partidosPronosticables.filter((partido) =>
     Boolean(pronosticosGuardados[partido.id])
   ).length;
-  const totalPendientes = Math.max(partidosPronosticables.length - totalGuardados, 0);
-  const totalAbiertos = partidosPronosticables.filter(
-    (partido) => !partidoBloqueado(partido)
+  const totalPendientes = partidosAbiertos.filter(
+    (partido) => !pronosticosGuardados[partido.id]
   ).length;
+  const totalAbiertos = partidosAbiertos.length;
 
   const bonusCompletados = useMemo(() => {
     if (!bonusResumen) return 0;
@@ -809,8 +942,8 @@ export default function MisPronosticosPage() {
                   ? "Todos los partidos tienen pronóstico."
                   : `Te faltan ${totalPendientes} partidos.`
               }
-              href="#partidos"
-              cta={totalPendientes === 0 ? "Revisar partidos" : "Continuar partidos"}
+              href={primerPartidoSinGuardar ? `#partido-${primerPartidoSinGuardar.id}` : "#partidos"}
+              cta={totalPendientes === 0 ? "Revisar partidos" : "Ir al siguiente pendiente"}
               completo={totalPendientes === 0}
             />
 
@@ -870,6 +1003,32 @@ export default function MisPronosticosPage() {
           </div>
         </div>
 
+        {proximoPartidoAbierto && (
+          <section className="quickNextCard">
+            <div className="quickNextIcon">
+              <ShieldCheck size={22} />
+            </div>
+
+            <div className="quickNextText">
+              <span>Acceso rápido</span>
+              <strong>
+                {proximoPartidoAbierto.local} - {proximoPartidoAbierto.visitante}
+              </strong>
+              <p>
+                Próximo partido abierto · {formatearFecha(proximoPartidoAbierto.fecha_inicio)} a las {formatearHora(proximoPartidoAbierto.fecha_inicio)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="quickNextButton"
+              onClick={() => saltarAPartido(proximoPartidoAbierto.id)}
+            >
+              Ir al pronóstico
+            </button>
+          </section>
+        )}
+
         <div id="partidos" className="filtersWrapper">
           <div className="searchBox">
             <Search size={18} />
@@ -898,7 +1057,7 @@ export default function MisPronosticosPage() {
         </div>
 
         <div className="resultsInfo">
-          Mostrando {partidosFiltrados.length} de {partidos.length} partidos
+          Mostrando {partidosFiltrados.length} de {partidos.length} partidos · Ordenado para editar primero lo urgente
         </div>
 
         <div className="cards">
@@ -914,7 +1073,8 @@ export default function MisPronosticosPage() {
             return (
               <article
                 key={partido.id}
-                className={`card ${bloqueado ? "blockedCard" : ""} ${claseFase}`}
+                id={`partido-${partido.id}`}
+                className={`card ${bloqueado ? "blockedCard" : ""} ${finalizado ? "compactFinished" : ""} ${partidoDestacadoId === partido.id ? "highlightCard" : ""} ${claseFase}`}
               >
                 <div className="topRow">
                   <div className="topLeft">
@@ -1602,6 +1762,66 @@ function Styles() {
         font-weight: 900;
       }
 
+      .quickNextCard {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+        border-radius: 24px;
+        padding: 16px;
+        background: linear-gradient(145deg, rgba(37,99,235,0.22), rgba(15,23,42,0.88));
+        border: 1px solid rgba(96,165,250,0.30);
+        box-shadow: 0 18px 46px rgba(2,6,23,0.22);
+      }
+
+      .quickNextIcon {
+        width: 48px;
+        height: 48px;
+        border-radius: 18px;
+        background: rgba(37,99,235,0.26);
+        color: #bfdbfe;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .quickNextText span {
+        display: block;
+        color: #93c5fd;
+        font-size: 11px;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        margin-bottom: 4px;
+      }
+
+      .quickNextText strong {
+        display: block;
+        color: white;
+        font-size: 18px;
+        font-weight: 950;
+      }
+
+      .quickNextText p {
+        color: #cbd5e1;
+        margin: 4px 0 0;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+
+      .quickNextButton {
+        border: none;
+        border-radius: 16px;
+        padding: 13px 16px;
+        background: #2563eb;
+        color: white;
+        font-weight: 950;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
       .filtersWrapper {
         display: grid;
         grid-template-columns: 1fr;
@@ -1683,6 +1903,30 @@ function Styles() {
         border: 1px solid rgba(255,255,255,0.12);
         border-radius: 26px;
         padding: 20px;
+        scroll-margin-top: 118px;
+        transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+      }
+
+      .highlightCard {
+        border-color: rgba(250,204,21,0.78) !important;
+        box-shadow: 0 0 0 3px rgba(250,204,21,0.18), 0 24px 70px rgba(250,204,21,0.14);
+        transform: translateY(-2px);
+      }
+
+      .compactFinished .pronosticoBox {
+        display: none;
+      }
+
+      .compactFinished .bottomRow {
+        margin-top: 12px;
+        padding: 13px 14px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.045);
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .compactFinished .saveButton {
+        display: none;
       }
 
       .blockedCard {
@@ -2156,6 +2400,10 @@ function Styles() {
       }
 
       @media (max-width: 760px) {
+        .misPronosticosPage {
+          overflow-x: hidden;
+        }
+
         .header h1 {
           font-size: 34px;
         }
@@ -2193,6 +2441,21 @@ function Styles() {
           font-size: 14px;
         }
 
+        .quickNextCard {
+          grid-template-columns: 1fr;
+          align-items: stretch;
+          padding: 14px;
+          border-radius: 22px;
+        }
+
+        .quickNextIcon {
+          display: none;
+        }
+
+        .quickNextButton {
+          width: 100%;
+        }
+
         .summaryBox {
           display: flex;
           overflow-x: auto;
@@ -2223,6 +2486,14 @@ function Styles() {
         .filtersWrapper {
           gap: 8px;
           margin-bottom: 8px;
+          position: sticky;
+          top: calc(72px + env(safe-area-inset-top));
+          z-index: 30;
+          margin-left: -12px;
+          margin-right: -12px;
+          padding: 8px 12px;
+          background: linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.78));
+          backdrop-filter: blur(12px);
         }
 
         .searchBox {

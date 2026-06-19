@@ -559,7 +559,10 @@ export default function PartidoDetallePage() {
           </div>
 
           {!partidoEmpezado && (
-            <a href="/mis-pronosticos" className="primaryButton">
+            <a
+              href={`/mis-pronosticos?partido=${partido.id}#partido-${partido.id}`}
+              className="primaryButton"
+            >
               <Target size={20} />
               Hacer pronóstico
             </a>
@@ -779,6 +782,7 @@ function Styles() {
         background: linear-gradient(180deg, #020617 0%, #111827 100%);
         color: white;
         padding: 32px 16px 110px;
+        overflow-x: hidden;
       }
 
       .container {

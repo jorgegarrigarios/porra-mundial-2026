@@ -52,11 +52,12 @@ type PronosticoResumen = {
 };
 
 type Filtro =
+  | "Próximos"
+  | "Finalizados"
   | "Todos"
   | "Fase de grupos"
   | "Eliminatorias"
-  | "Finalizados"
-  | "Pendientes";
+  | "Equipos pendientes";
 
 type QueryResult<T> = {
   data: T | null;
@@ -64,11 +65,12 @@ type QueryResult<T> = {
 };
 
 const filtros: Filtro[] = [
+  "Próximos",
+  "Finalizados",
   "Todos",
   "Fase de grupos",
   "Eliminatorias",
-  "Finalizados",
-  "Pendientes",
+  "Equipos pendientes",
 ];
 
 function queryTimeout<T>(ms = 12000): Promise<QueryResult<T>> {
@@ -89,7 +91,7 @@ export default function PartidosPage() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [participante, setParticipante] = useState<Participante | null>(null);
   const [pronosticosGuardados, setPronosticosGuardados] = useState<Record<number, boolean>>({});
-  const [filtroActivo, setFiltroActivo] = useState<Filtro>("Todos");
+  const [filtroActivo, setFiltroActivo] = useState<Filtro>("Próximos");
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -296,6 +298,22 @@ export default function PartidosPage() {
     );
   }
 
+  function obtenerTimestamp(partido: Partido) {
+    const fecha = fechaValida(partido.fecha_inicio);
+
+    if (!fecha) return Number.MAX_SAFE_INTEGER;
+
+    return fecha.getTime();
+  }
+
+  function compararPartidosPorFechaAscendente(a: Partido, b: Partido) {
+    return obtenerTimestamp(a) - obtenerTimestamp(b);
+  }
+
+  function compararPartidosPorFechaDescendente(a: Partido, b: Partido) {
+    return obtenerTimestamp(b) - obtenerTimestamp(a);
+  }
+
   function obtenerProximoPartido() {
     const ahora = new Date();
 
@@ -313,37 +331,55 @@ export default function PartidosPage() {
   const partidosFiltrados = useMemo(() => {
     const textoBusqueda = normalizarTexto(busqueda.trim());
 
-    return partidos.filter((partido) => {
-      const finalizado =
-        partido.resultado_local !== null &&
-        partido.resultado_visitante !== null;
+    return partidos
+      .filter((partido) => {
+        const finalizado = partidoFinalizado(partido);
+        const equiposPendientes = partidoTieneEquiposPendientes(partido);
 
-      const coincideBusqueda =
-        textoBusqueda === "" ||
-        normalizarTexto(partido.local).includes(textoBusqueda) ||
-        normalizarTexto(partido.visitante).includes(textoBusqueda) ||
-        normalizarTexto(partido.estadio ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.ciudad ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.fase ?? "").includes(textoBusqueda) ||
-        normalizarTexto(partido.grupo ?? "").includes(textoBusqueda);
+        const coincideBusqueda =
+          textoBusqueda === "" ||
+          normalizarTexto(partido.local).includes(textoBusqueda) ||
+          normalizarTexto(partido.visitante).includes(textoBusqueda) ||
+          normalizarTexto(partido.estadio ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.ciudad ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.fase ?? "").includes(textoBusqueda) ||
+          normalizarTexto(partido.grupo ?? "").includes(textoBusqueda);
 
-      if (!coincideBusqueda) return false;
+        if (!coincideBusqueda) return false;
 
-      if (filtroActivo === "Todos") return true;
+        if (filtroActivo === "Próximos") {
+          return !finalizado && !equiposPendientes;
+        }
 
-      if (filtroActivo === "Fase de grupos") {
-        return partido.fase === "Fase de grupos";
-      }
+        if (filtroActivo === "Finalizados") return finalizado;
+        if (filtroActivo === "Todos") return true;
 
-      if (filtroActivo === "Eliminatorias") {
-        return partido.fase !== "Fase de grupos";
-      }
+        if (filtroActivo === "Fase de grupos") {
+          return partido.fase === "Fase de grupos";
+        }
 
-      if (filtroActivo === "Finalizados") return finalizado;
-      if (filtroActivo === "Pendientes") return !finalizado;
+        if (filtroActivo === "Eliminatorias") {
+          return partido.fase !== "Fase de grupos";
+        }
 
-      return true;
-    });
+        if (filtroActivo === "Equipos pendientes") return equiposPendientes;
+
+        return true;
+      })
+      .sort((a, b) => {
+        // Próximos: primero el partido pendiente más cercano y después los siguientes.
+        if (filtroActivo === "Próximos") {
+          return compararPartidosPorFechaAscendente(a, b);
+        }
+
+        // Finalizados: primero el último partido terminado y después los más antiguos.
+        if (filtroActivo === "Finalizados") {
+          return compararPartidosPorFechaDescendente(a, b);
+        }
+
+        // Equipos pendientes y vistas de consulta mantienen lectura cronológica.
+        return compararPartidosPorFechaAscendente(a, b);
+      });
   }, [partidos, busqueda, filtroActivo]);
 
   const proximoPartido = useMemo(() => obtenerProximoPartido(), [partidos]);
@@ -454,7 +490,10 @@ export default function PartidosPage() {
                 )}
               </div>
 
-              <Link href="/mis-pronosticos" className="nextButton">
+              <Link
+                href={`/mis-pronosticos?partido=${proximoPartido.id}#partido-${proximoPartido.id}`}
+                className="nextButton"
+              >
                 {pronosticosGuardados[proximoPartido.id] ? (
                   <>
                     <Edit3 size={17} />
@@ -665,7 +704,7 @@ export default function PartidosPage() {
                             </Link>
 
                             <Link
-                              href="/mis-pronosticos"
+                              href={`/mis-pronosticos?partido=${partido.id}#partido-${partido.id}`}
                               className={`pronosticoButton ${guardado ? "editButton" : ""}`}
                             >
                               {guardado ? <Edit3 size={17} /> : <Target size={17} />}
@@ -688,6 +727,7 @@ export default function PartidosPage() {
           min-height: 100vh;
           padding: 28px 16px 120px;
           color: white;
+          overflow-x: hidden;
         }
 
         .container {
@@ -1006,7 +1046,7 @@ export default function PartidosPage() {
         }
 
         .dateSection {
-          scroll-margin-top: 90px;
+          scroll-margin-top: 110px;
         }
 
         .dateSection h2 {
@@ -1545,6 +1585,7 @@ export default function PartidosPage() {
           .detailButton,
           .pronosticoButton {
             width: 100%;
+            box-sizing: border-box;
           }
         }
       `}</style>
