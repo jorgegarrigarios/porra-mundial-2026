@@ -202,6 +202,7 @@ export default function AdminStandingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [importandoGrupos, setImportandoGrupos] = useState(false);
   const [recalculandoGrupos, setRecalculandoGrupos] = useState(false);
+  const [actualizandoCruces, setActualizandoCruces] = useState(false);
   const [mensajeImportacion, setMensajeImportacion] = useState<string | null>(null);
   const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
@@ -357,6 +358,87 @@ export default function AdminStandingsPage() {
     }
   }
 
+  async function actualizarCrucesEliminatorias() {
+    setActualizandoCruces(true);
+    setMensajeImportacion(null);
+    setErrorImportacion(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("No hay sesión activa. Vuelve a iniciar sesión.");
+      }
+
+      const res = await fetch("/api/admin/actualizar-cruces-eliminatorias", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        resumen?: {
+          partidosEliminatorias?: number;
+          partidosDieciseisavos?: number;
+          fixturesEliminatoriasConEquipos?: number;
+          fixturesDieciseisavosConEquipos?: number;
+          gruposCerrados?: number;
+          actualizados?: number;
+          ignorados?: number;
+          cambiosPorFixtures?: number;
+          cambiosPorStandings?: number;
+          cambiosPorBracket?: number;
+          horariosActualizados?: number;
+          tercerosPendientes?: number;
+          crucesFuturosPendientes?: number;
+        };
+      };
+
+      if (!res.ok || !json.ok) {
+        throw new Error(
+          json.error ?? "No se pudieron actualizar los cruces de eliminatorias."
+        );
+      }
+
+      setMensajeImportacion(
+        `Cruces de eliminatorias actualizados: ${
+          json.resumen?.actualizados ?? 0
+        } partidos modificados de ${
+          json.resumen?.partidosEliminatorias ?? json.resumen?.partidosDieciseisavos ?? 0
+        }. Cambios por fixtures API: ${
+          json.resumen?.cambiosPorFixtures ?? 0
+        }. Cambios por grupos cerrados: ${
+          json.resumen?.cambiosPorStandings ?? 0
+        }. Cambios por bracket: ${
+          json.resumen?.cambiosPorBracket ?? 0
+        }. Horarios corregidos: ${
+          json.resumen?.horariosActualizados ?? 0
+        }. Terceros pendientes: ${
+          json.resumen?.tercerosPendientes ?? 0
+        }. Cruces futuros pendientes: ${json.resumen?.crucesFuturosPendientes ?? 0}.`
+      );
+
+      await cargarStandings();
+    } catch (err) {
+      setErrorImportacion(
+        err instanceof Error
+          ? err.message
+          : "Error desconocido actualizando cruces de eliminatorias."
+      );
+    } finally {
+      setActualizandoCruces(false);
+    }
+  }
+
   useEffect(() => {
     let activo = true;
 
@@ -476,7 +558,7 @@ export default function AdminStandingsPage() {
               className="refreshButton"
               type="button"
               onClick={cargarStandings}
-              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos || actualizandoCruces}
             >
               {cargandoDatos ? (
                 <Loader2 size={18} className="spin" />
@@ -490,7 +572,7 @@ export default function AdminStandingsPage() {
               className="importButton"
               type="button"
               onClick={importarClasificadosOficiales}
-              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos || actualizandoCruces}
             >
               {importandoGrupos ? (
                 <Loader2 size={18} className="spin" />
@@ -501,10 +583,24 @@ export default function AdminStandingsPage() {
             </button>
 
             <button
+              className="knockoutButton"
+              type="button"
+              onClick={actualizarCrucesEliminatorias}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos || actualizandoCruces}
+            >
+              {actualizandoCruces ? (
+                <Loader2 size={18} className="spin" />
+              ) : (
+                <Trophy size={18} />
+              )}
+              Actualizar eliminatorias completas
+            </button>
+
+            <button
               className="recalculateButton"
               type="button"
               onClick={recalcularClasificadosGrupos}
-              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos}
+              disabled={cargandoDatos || importandoGrupos || recalculandoGrupos || actualizandoCruces}
             >
               {recalculandoGrupos ? (
                 <Loader2 size={18} className="spin" />
@@ -547,8 +643,8 @@ export default function AdminStandingsPage() {
         {!error && data && (
           <div className="safeNote">
             <AlertTriangle size={18} />
-            Esta pantalla no guarda nada en Supabase. Solo muestra la respuesta
-            de API-FOOTBALL transformada visualmente para revisión del admin.
+            Esta pantalla muestra la respuesta de API-FOOTBALL para revisión del admin.
+            Los botones de importación, recalculo y cruces sí actualizan datos controlados.
           </div>
         )}
 
@@ -824,6 +920,7 @@ function Styles() {
 
       .refreshButton,
       .importButton,
+      .knockoutButton,
       .recalculateButton {
         color: white;
         border: none;
@@ -846,12 +943,17 @@ function Styles() {
         background: #2563eb;
       }
 
+      .knockoutButton {
+        background: #0891b2;
+      }
+
       .recalculateButton {
         background: #7c3aed;
       }
 
       .refreshButton:disabled,
       .importButton:disabled,
+      .knockoutButton:disabled,
       .recalculateButton:disabled {
         opacity: 0.6;
         cursor: not-allowed;
