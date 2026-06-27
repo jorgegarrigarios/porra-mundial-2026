@@ -606,16 +606,36 @@ export default function MisPronosticosPage() {
   ) {
     if (valor !== "" && !/^\d+$/.test(valor)) return;
 
-    setPronosticos((prev) => ({
-      ...prev,
-      [partidoId]: {
-        local: prev[partidoId]?.local ?? "",
-        visitante: prev[partidoId]?.visitante ?? "",
-        signoGrupo: prev[partidoId]?.signoGrupo ?? "",
-        clasificadoPronosticado: prev[partidoId]?.clasificadoPronosticado ?? "",
-        [campo]: valor,
-      },
-    }));
+    setPronosticos((prev) => {
+      const pronosticoAnterior = prev[partidoId] ?? {
+        local: "",
+        visitante: "",
+        signoGrupo: "",
+        clasificadoPronosticado: "",
+      };
+
+      const siguienteLocal =
+        campo === "local" ? valor : pronosticoAnterior.local ?? "";
+      const siguienteVisitante =
+        campo === "visitante" ? valor : pronosticoAnterior.visitante ?? "";
+
+      const marcadorCompleto =
+        siguienteLocal !== "" && siguienteVisitante !== "";
+      const sigueSiendoEmpate =
+        marcadorCompleto && siguienteLocal === siguienteVisitante;
+
+      return {
+        ...prev,
+        [partidoId]: {
+          local: siguienteLocal,
+          visitante: siguienteVisitante,
+          signoGrupo: pronosticoAnterior.signoGrupo ?? "",
+          clasificadoPronosticado: sigueSiendoEmpate
+            ? pronosticoAnterior.clasificadoPronosticado ?? ""
+            : "",
+        },
+      };
+    });
   }
 
   function actualizarSignoGrupo(partidoId: number, signo: "1" | "X" | "2") {
@@ -1069,6 +1089,15 @@ export default function MisPronosticosPage() {
             const finalizado = partidoFinalizado(partido);
             const guardando = guardandoId === partido.id;
             const claseFase = obtenerClaseFase(partido.fase);
+            const pronosticoActual = pronosticos[partido.id];
+            const marcadorLocal = pronosticoActual?.local ?? "";
+            const marcadorVisitante = pronosticoActual?.visitante ?? "";
+            const marcadorCompleto =
+              marcadorLocal !== "" && marcadorVisitante !== "";
+            const empatePronosticado =
+              marcadorCompleto && marcadorLocal === marcadorVisitante;
+            const clasificadoElegido =
+              pronosticoActual?.clasificadoPronosticado ?? "";
 
             return (
               <article
@@ -1254,56 +1283,57 @@ export default function MisPronosticosPage() {
                         </div>
                       </div>
 
-                      {pronosticos[partido.id]?.local !== "" &&
-                        pronosticos[partido.id]?.visitante !== "" &&
-                        pronosticos[partido.id]?.local ===
-                          pronosticos[partido.id]?.visitante && (
-                          <div className="advanceSelector">
-                            <label>Si hay empate, ¿quién pasa?</label>
+                      {empatePronosticado && (
+                        <div className="advanceSelector">
+                          <label>Si hay empate, ¿quién pasa?</label>
 
-                            <div className="advanceButtons">
-                              <button
-                                type="button"
-                                disabled={bloqueado || guardando}
-                                className={
-                                  pronosticos[partido.id]?.clasificadoPronosticado ===
+                          <div className="advanceButtons">
+                            <button
+                              type="button"
+                              disabled={bloqueado || guardando}
+                              className={
+                                clasificadoElegido === partido.local
+                                  ? "advanceButton advanceButtonActive"
+                                  : "advanceButton"
+                              }
+                              onClick={() =>
+                                actualizarClasificadoPronosticado(
+                                  partido.id,
                                   partido.local
-                                    ? "advanceButton advanceButtonActive"
-                                    : "advanceButton"
-                                }
-                                onClick={() =>
-                                  actualizarClasificadoPronosticado(
-                                    partido.id,
-                                    partido.local
-                                  )
-                                }
-                              >
-                                {partido.local}
-                              </button>
+                                )
+                              }
+                            >
+                              {partido.local}
+                            </button>
 
-                              <button
-                                type="button"
-                                disabled={bloqueado || guardando}
-                                className={
-                                  pronosticos[partido.id]?.clasificadoPronosticado ===
+                            <button
+                              type="button"
+                              disabled={bloqueado || guardando}
+                              className={
+                                clasificadoElegido === partido.visitante
+                                  ? "advanceButton advanceButtonActive"
+                                  : "advanceButton"
+                              }
+                              onClick={() =>
+                                actualizarClasificadoPronosticado(
+                                  partido.id,
                                   partido.visitante
-                                    ? "advanceButton advanceButtonActive"
-                                    : "advanceButton"
-                                }
-                                onClick={() =>
-                                  actualizarClasificadoPronosticado(
-                                    partido.id,
-                                    partido.visitante
-                                  )
-                                }
-                              >
-                                {partido.visitante}
-                              </button>
-                            </div>
-
-                            <p>Solo sirve para determinar el clasificado. No suma puntos extra.</p>
+                                )
+                              }
+                            >
+                              {partido.visitante}
+                            </button>
                           </div>
-                        )}
+
+                          {clasificadoElegido ? (
+                            <p>
+                              Selección elegida: <strong>{clasificadoElegido}</strong>. Puedes cambiarla antes de que empiece el partido.
+                            </p>
+                          ) : (
+                            <p>Elige qué selección pasa si el empate se mantiene tras prórroga o penaltis.</p>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
 
