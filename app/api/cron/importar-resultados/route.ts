@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { obtenerPartidosMundial2026 } from "@/lib/api/football";
 import { recalcularPronosticos } from "@/lib/recalcularPronosticos";
+import { actualizarCrucesEliminatorias } from "@/lib/actualizarEliminatorias";
 
 type FixtureApiFootball = {
   fixture?: {
@@ -524,6 +525,59 @@ async function importarResultadosDesdeApi() {
     errores.push(recalculo.error ?? "No se pudieron recalcular los pronósticos.");
   }
 
+  let eliminatorias: {
+    ok: boolean;
+    actualizados: number;
+    horariosActualizados: number;
+    tercerosPendientes: number;
+    crucesFuturosPendientes: number;
+    error: string | null;
+  } | null = null;
+
+  try {
+    const resultadoEliminatorias = await actualizarCrucesEliminatorias({
+      dryRun: false,
+      force: false,
+    });
+
+    eliminatorias = {
+      ok: resultadoEliminatorias.ok,
+      actualizados: resultadoEliminatorias.resumen?.actualizados ?? 0,
+      horariosActualizados:
+        resultadoEliminatorias.resumen?.horariosActualizados ?? 0,
+      tercerosPendientes:
+        resultadoEliminatorias.resumen?.tercerosPendientes ?? 0,
+      crucesFuturosPendientes:
+        resultadoEliminatorias.resumen?.crucesFuturosPendientes ?? 0,
+      error:
+        resultadoEliminatorias.ok
+          ? null
+          : resultadoEliminatorias.error ??
+            resultadoEliminatorias.errores?.join(" | ") ??
+            "No se pudieron actualizar las eliminatorias.",
+    };
+
+    if (!resultadoEliminatorias.ok) {
+      errores.push(`Eliminatorias: ${eliminatorias.error}`);
+    }
+  } catch (error) {
+    const mensajeEliminatorias =
+      error instanceof Error
+        ? error.message
+        : "Error desconocido actualizando eliminatorias.";
+
+    eliminatorias = {
+      ok: false,
+      actualizados: 0,
+      horariosActualizados: 0,
+      tercerosPendientes: 0,
+      crucesFuturosPendientes: 0,
+      error: mensajeEliminatorias,
+    };
+
+    errores.push(`Eliminatorias: ${mensajeEliminatorias}`);
+  }
+
   return {
     ok: errores.length === 0,
     resumen: {
@@ -532,6 +586,7 @@ async function importarResultadosDesdeApi() {
       actualizados,
       ignorados,
       pronosticosActualizados: recalculo.actualizados ?? 0,
+      eliminatorias,
     },
     errores,
   };
