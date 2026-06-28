@@ -98,6 +98,23 @@ function normalizarTexto(valor: string | null | undefined) {
     .trim();
 }
 
+function normalizarGrupo(valor: string | null | undefined) {
+  const limpio = normalizarTexto(valor);
+
+  if (!limpio) return "";
+
+  const matchLetra =
+    limpio.match(/^grupo\s*([a-l])$/i) ??
+    limpio.match(/^group\s*([a-l])$/i) ??
+    limpio.match(/^([a-l])$/i);
+
+  if (matchLetra?.[1]) {
+    return `grupo ${matchLetra[1].toLowerCase()}`;
+  }
+
+  return limpio;
+}
+
 function calcularPuntosPronostico(
   pronostico: PronosticoGrupo,
   resultado: ResultadoGrupo
@@ -197,7 +214,7 @@ export async function POST(request: Request) {
     }
 
     const resultadosPorGrupo = new Map(
-      resultados.map((resultado) => [resultado.grupo, resultado])
+      resultados.map((resultado) => [normalizarGrupo(resultado.grupo), resultado])
     );
 
     const { data: pronosticosData, error: pronosticosError } =
@@ -226,11 +243,15 @@ export async function POST(request: Request) {
       }
     > = {};
 
+    const gruposPronosticosSinResultado = new Set<string>();
+
     for (const pronostico of pronosticos) {
-      const resultado = resultadosPorGrupo.get(pronostico.grupo);
+      const grupoNormalizado = normalizarGrupo(pronostico.grupo);
+      const resultado = resultadosPorGrupo.get(grupoNormalizado);
 
       if (!resultado) {
         ignorados += 1;
+        gruposPronosticosSinResultado.add(pronostico.grupo);
         continue;
       }
 
@@ -250,15 +271,17 @@ export async function POST(request: Request) {
       actualizados += 1;
       puntosTotalesAsignados += actualizacion.puntos_total;
 
-      if (!resumenPorGrupo[pronostico.grupo]) {
-        resumenPorGrupo[pronostico.grupo] = {
+      const grupoResumen = resultado.grupo;
+
+      if (!resumenPorGrupo[grupoResumen]) {
+        resumenPorGrupo[grupoResumen] = {
           pronosticos: 0,
           puntos: 0,
         };
       }
 
-      resumenPorGrupo[pronostico.grupo].pronosticos += 1;
-      resumenPorGrupo[pronostico.grupo].puntos += actualizacion.puntos_total;
+      resumenPorGrupo[grupoResumen].pronosticos += 1;
+      resumenPorGrupo[grupoResumen].puntos += actualizacion.puntos_total;
     }
 
     return NextResponse.json({
@@ -270,6 +293,8 @@ export async function POST(request: Request) {
         ignorados,
         puntosTotalesAsignados,
         resumenPorGrupo,
+        gruposResultadosDisponibles: resultados.map((resultado) => resultado.grupo),
+        gruposPronosticosSinResultado: Array.from(gruposPronosticosSinResultado),
       },
     });
   } catch (error) {
