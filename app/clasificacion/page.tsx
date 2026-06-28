@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   GitBranch,
   Loader2,
   RefreshCw,
@@ -11,6 +10,9 @@ import {
   Table2,
   Trophy,
 } from "lucide-react";
+
+import TeamFlag from "@/components/TeamFlag";
+import { supabase } from "@/lib/supabase";
 
 type Vista = "grupos" | "eliminatorias";
 
@@ -123,50 +125,41 @@ const NOMBRES_EQUIPOS_ES: Record<string, string> = {
   Uzbekistan: "Uzbekistán",
 };
 
-const RONDAS_ELIMINATORIAS = [
-  {
-    ronda: "Dieciseisavos",
-    partidos: Array.from({ length: 16 }, (_, index) => ({
-      id: `dieciseisavos-${index + 1}`,
-      local: "Clasificado pendiente",
-      visitante: "Clasificado pendiente",
-    })),
-  },
-  {
-    ronda: "Octavos",
-    partidos: Array.from({ length: 8 }, (_, index) => ({
-      id: `octavos-${index + 1}`,
-      local: "Ganador pendiente",
-      visitante: "Ganador pendiente",
-    })),
-  },
-  {
-    ronda: "Cuartos",
-    partidos: Array.from({ length: 4 }, (_, index) => ({
-      id: `cuartos-${index + 1}`,
-      local: "Ganador pendiente",
-      visitante: "Ganador pendiente",
-    })),
-  },
-  {
-    ronda: "Semifinales",
-    partidos: Array.from({ length: 2 }, (_, index) => ({
-      id: `semifinales-${index + 1}`,
-      local: "Ganador pendiente",
-      visitante: "Ganador pendiente",
-    })),
-  },
-  {
-    ronda: "Final",
-    partidos: [
-      {
-        id: "final-1",
-        local: "Finalista pendiente",
-        visitante: "Finalista pendiente",
-      },
-    ],
-  },
+type PartidoEliminatoria = {
+  id: number;
+  local: string | null;
+  visitante: string | null;
+  local_code: string | null;
+  visitante_code: string | null;
+  fecha_inicio: string | null;
+  fase: string | null;
+  resultado_local: number | null;
+  resultado_visitante: number | null;
+  clasificado_real: string | null;
+};
+
+type RondaEliminatoria = {
+  ronda: string;
+  partidos: PartidoEliminatoria[];
+};
+
+const FASES_ELIMINATORIAS = [
+  "Dieciseisavos",
+  "Octavos",
+  "Cuartos",
+  "Semifinales",
+  "Tercer puesto",
+  "Final",
 ];
+
+const ORDEN_FASES_ELIMINATORIAS: Record<string, number> = {
+  Dieciseisavos: 1,
+  Octavos: 2,
+  Cuartos: 3,
+  Semifinales: 4,
+  "Tercer puesto": 5,
+  Final: 6,
+};
 
 function traducirEquipo(nombreApi: string) {
   return NOMBRES_EQUIPOS_ES[nombreApi] ?? nombreApi;
@@ -246,11 +239,89 @@ function diferenciaGolesEquipo(equipo: ApiStandingItem) {
   return Number.isFinite(equipo.goalsDiff) ? equipo.goalsDiff : 0;
 }
 
+function esPlaceholderEquipo(valor: string | null | undefined) {
+  const limpio = valor?.trim() ?? "";
+  const normalizado = limpio.toLowerCase();
+
+  return (
+    !limpio ||
+    /^[12][A-L]$/i.test(limpio) ||
+    /^3[A-L](\/[A-L])+$/i.test(limpio) ||
+    normalizado.startsWith("ganador ") ||
+    normalizado.startsWith("perdedor ") ||
+    normalizado.includes("winner") ||
+    normalizado.includes("loser") ||
+    normalizado.includes("tbd") ||
+    normalizado.includes("pendiente")
+  );
+}
+
+function formatearFechaPartido(fechaInicio: string | null) {
+  if (!fechaInicio) return "Fecha pendiente";
+
+  const fecha = new Date(fechaInicio);
+  if (Number.isNaN(fecha.getTime())) return "Fecha pendiente";
+
+  return fecha.toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Madrid",
+  });
+}
+
+function formatearHoraPartido(fechaInicio: string | null) {
+  if (!fechaInicio) return "--:--";
+
+  const fecha = new Date(fechaInicio);
+  if (Number.isNaN(fecha.getTime())) return "--:--";
+
+  return fecha.toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Madrid",
+  });
+}
+
+function normalizarComparacionEquipo(valor: string | null | undefined) {
+  return valor
+    ?.trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") ?? "";
+}
+
+function ordenarPartidosEliminatoria(a: PartidoEliminatoria, b: PartidoEliminatoria) {
+  const ordenA = ORDEN_FASES_ELIMINATORIAS[a.fase ?? ""] ?? 99;
+  const ordenB = ORDEN_FASES_ELIMINATORIAS[b.fase ?? ""] ?? 99;
+
+  if (ordenA !== ordenB) return ordenA - ordenB;
+
+  const fechaA = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : Number.MAX_SAFE_INTEGER;
+  const fechaB = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : Number.MAX_SAFE_INTEGER;
+
+  if (fechaA !== fechaB) return fechaA - fechaB;
+
+  return a.id - b.id;
+}
+
+function construirRondasEliminatorias(partidos: PartidoEliminatoria[]): RondaEliminatoria[] {
+  return FASES_ELIMINATORIAS.map((fase) => ({
+    ronda: fase,
+    partidos: partidos
+      .filter((partido) => partido.fase === fase)
+      .sort(ordenarPartidosEliminatoria),
+  })).filter((ronda) => ronda.partidos.length > 0);
+}
+
 export default function ClasificacionPage() {
   const [vista, setVista] = useState<Vista>("grupos");
   const [data, setData] = useState<ApiStandingsResponse | null>(null);
+  const [partidosEliminatorias, setPartidosEliminatorias] = useState<PartidoEliminatoria[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [cargandoEliminatorias, setCargandoEliminatorias] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorEliminatorias, setErrorEliminatorias] = useState<string | null>(null);
 
   async function cargarStandings() {
     setCargando(true);
@@ -280,11 +351,49 @@ export default function ClasificacionPage() {
     }
   }
 
+  async function cargarEliminatorias() {
+    setCargandoEliminatorias(true);
+    setErrorEliminatorias(null);
+
+    try {
+      const { data: partidosData, error: partidosError } = await supabase
+        .from("partidos")
+        .select(
+          "id, local, visitante, local_code, visitante_code, fecha_inicio, fase, resultado_local, resultado_visitante, clasificado_real"
+        )
+        .in("fase", FASES_ELIMINATORIAS)
+        .order("fecha_inicio", { ascending: true, nullsFirst: false });
+
+      if (partidosError) {
+        throw new Error(partidosError.message);
+      }
+
+      setPartidosEliminatorias(
+        ((partidosData ?? []) as PartidoEliminatoria[]).sort(ordenarPartidosEliminatoria)
+      );
+    } catch (err) {
+      setErrorEliminatorias(
+        err instanceof Error
+          ? err.message
+          : "Error desconocido cargando el cuadro eliminatorio."
+      );
+      setPartidosEliminatorias([]);
+    } finally {
+      setCargandoEliminatorias(false);
+    }
+  }
+
   useEffect(() => {
     cargarStandings();
+    cargarEliminatorias();
   }, []);
 
   const grupos = useMemo(() => extraerStandings(data), [data]);
+
+  const rondasEliminatorias = useMemo(
+    () => construirRondasEliminatorias(partidosEliminatorias),
+    [partidosEliminatorias]
+  );
 
   const gruposPrincipales = grupos.filter((grupo) =>
     esGrupoPrincipal(grupo.nombreApi)
@@ -331,21 +440,19 @@ export default function ClasificacionPage() {
             </button>
           </div>
 
-          {vista === "grupos" && (
-            <button
-              type="button"
-              className="refreshButton"
-              onClick={cargarStandings}
-              disabled={cargando}
-            >
-              {cargando ? (
-                <Loader2 size={18} className="spin" />
-              ) : (
-                <RefreshCw size={18} />
-              )}
-              Actualizar
-            </button>
-          )}
+          <button
+            type="button"
+            className="refreshButton"
+            onClick={vista === "grupos" ? cargarStandings : cargarEliminatorias}
+            disabled={vista === "grupos" ? cargando : cargandoEliminatorias}
+          >
+            {(vista === "grupos" ? cargando : cargandoEliminatorias) ? (
+              <Loader2 size={18} className="spin" />
+            ) : (
+              <RefreshCw size={18} />
+            )}
+            Actualizar
+          </button>
         </div>
 
         {vista === "grupos" ? (
@@ -356,7 +463,11 @@ export default function ClasificacionPage() {
             mejoresTerceros={mejoresTerceros}
           />
         ) : (
-          <EliminatoriasView />
+          <EliminatoriasView
+            cargando={cargandoEliminatorias}
+            error={errorEliminatorias}
+            rondas={rondasEliminatorias}
+          />
         )}
       </div>
 
@@ -598,7 +709,51 @@ function GruposView({
   );
 }
 
-function EliminatoriasView() {
+function EliminatoriasView({
+  cargando,
+  error,
+  rondas,
+}: {
+  cargando: boolean;
+  error: string | null;
+  rondas: RondaEliminatoria[];
+}) {
+  if (cargando && rondas.length === 0) {
+    return (
+      <div className="loadingBox">
+        <Loader2 className="spin" size={30} />
+        <p>Cargando cuadro eliminatorio desde la tabla de partidos...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="errorBox">
+        <AlertTriangle size={22} />
+        <div>
+          <strong>No se ha podido cargar el cuadro eliminatorio</strong>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (rondas.length === 0) {
+    return (
+      <div className="errorBox">
+        <AlertTriangle size={22} />
+        <div>
+          <strong>No hay partidos de eliminatorias cargados</strong>
+          <p>
+            Revisa que la tabla partidos tenga registros con fase Dieciseisavos,
+            Octavos, Cuartos, Semifinales, Tercer puesto o Final.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="bracketIntro">
@@ -609,15 +764,21 @@ function EliminatoriasView() {
         <div>
           <h2>Cuadro eliminatorio</h2>
           <p>
-            Visualiza el camino hacia la final. En 2026 hay dieciseisavos:
-            pasan 32 selecciones, incluyendo los 8 mejores terceros.
+            Visualiza el camino hacia la final con los cruces reales cargados en
+            la aplicación. El cuadro se alimenta de la tabla partidos, igual que
+            Partidos y Mis pronósticos.
           </p>
         </div>
       </div>
 
       <div className="bracketScroll">
-        <div className="bracket">
-          {RONDAS_ELIMINATORIAS.map((ronda) => (
+        <div
+          className="bracket"
+          style={{
+            gridTemplateColumns: `repeat(${Math.max(rondas.length, 1)}, 1fr)`,
+          }}
+        >
+          {rondas.map((ronda) => (
             <section key={ronda.ronda} className="roundColumn">
               <div className="roundHeader">
                 <Trophy size={20} color="#facc15" />
@@ -625,17 +786,53 @@ function EliminatoriasView() {
               </div>
 
               <div className="matches">
-                {ronda.partidos.map((partido) => (
-                  <article key={partido.id} className="matchCard">
-                    <BracketTeam name={partido.local} />
-                    <BracketTeam name={partido.visitante} />
+                {ronda.partidos.map((partido) => {
+                  const local = partido.local ?? "Clasificado pendiente";
+                  const visitante = partido.visitante ?? "Clasificado pendiente";
+                  const ganador = partido.clasificado_real;
+                  const finalizado =
+                    partido.resultado_local !== null &&
+                    partido.resultado_visitante !== null;
 
-                    <div className="winnerBadge">
-                      <Trophy size={13} />
-                      Ganador pendiente
-                    </div>
-                  </article>
-                ))}
+                  return (
+                    <article key={partido.id} className="matchCard">
+                      <div className="matchDate">
+                        {formatearFechaPartido(partido.fecha_inicio)} · {formatearHoraPartido(partido.fecha_inicio)}
+                      </div>
+
+                      <BracketTeam
+                        name={local}
+                        code={partido.local_code}
+                        winner={Boolean(
+                          ganador &&
+                            local &&
+                            normalizarComparacionEquipo(ganador) === normalizarComparacionEquipo(local)
+                        )}
+                      />
+
+                      <BracketTeam
+                        name={visitante}
+                        code={partido.visitante_code}
+                        winner={Boolean(
+                          ganador &&
+                            visitante &&
+                            normalizarComparacionEquipo(ganador) === normalizarComparacionEquipo(visitante)
+                        )}
+                      />
+
+                      {finalizado && (
+                        <div className="matchResult">
+                          {partido.resultado_local} - {partido.resultado_visitante}
+                        </div>
+                      )}
+
+                      <div className={`winnerBadge ${ganador ? "winnerKnown" : ""}`}>
+                        <Trophy size={13} />
+                        {ganador ? `Pasa ${ganador}` : "Ganador pendiente"}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </section>
           ))}
@@ -645,10 +842,25 @@ function EliminatoriasView() {
   );
 }
 
-function BracketTeam({ name }: { name: string }) {
+function BracketTeam({
+  name,
+  code,
+  winner,
+}: {
+  name: string;
+  code: string | null;
+  winner: boolean;
+}) {
+  const pendiente = esPlaceholderEquipo(name);
+
   return (
-    <div className="matchTeam">
-      <span className="placeholderFlag" />
+    <div className={`matchTeam ${winner ? "matchTeamWinner" : ""}`}>
+      {pendiente ? (
+        <span className="placeholderFlag" />
+      ) : (
+        <TeamFlag code={code} name={name} size="sm" />
+      )}
+
       <span className="matchTeamName">{name}</span>
     </div>
   );
@@ -1206,9 +1418,8 @@ function Styles() {
       }
 
       .bracket {
-        min-width: 1050px;
+        min-width: 1260px;
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
         gap: 18px;
         align-items: start;
       }
@@ -1224,6 +1435,23 @@ function Styles() {
         border-radius: 20px;
         padding: 14px;
         position: relative;
+      }
+
+      .matchDate {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        max-width: 100%;
+        margin-bottom: 10px;
+        border-radius: 999px;
+        padding: 6px 9px;
+        background: rgba(37,99,235,0.14);
+        border: 1px solid rgba(96,165,250,0.20);
+        color: #bfdbfe;
+        font-size: 11px;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .04em;
       }
 
       .matchCard::after {
@@ -1251,6 +1479,12 @@ function Styles() {
         min-height: 42px;
       }
 
+      .matchTeamWinner {
+        background: rgba(34,197,94,0.14);
+        border: 1px solid rgba(34,197,94,0.30);
+        color: #bbf7d0;
+      }
+
       .matchTeam + .matchTeam {
         margin-top: 8px;
       }
@@ -1262,6 +1496,18 @@ function Styles() {
         font-size: 14px;
       }
 
+      .matchResult {
+        margin-top: 10px;
+        width: fit-content;
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.10);
+        color: white;
+        font-size: 13px;
+        font-weight: 950;
+      }
+
       .winnerBadge {
         margin-top: 10px;
         display: inline-flex;
@@ -1271,6 +1517,10 @@ function Styles() {
         font-size: 12px;
         font-weight: 900;
         text-transform: uppercase;
+      }
+
+      .winnerKnown {
+        color: #86efac;
       }
 
       .spin {
@@ -1590,7 +1840,7 @@ function Styles() {
         }
 
         .bracket {
-          min-width: 820px;
+          min-width: 1080px;
         }
       }
     `}</style>
