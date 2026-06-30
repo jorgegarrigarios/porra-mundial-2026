@@ -466,17 +466,17 @@ export default function ReglasLigaPage({ params }: Props) {
 
                 <div className="tieScoreRow partial">
                   <strong>3 puntos</strong>
-                  <span>Otro empate y pasa Marruecos</span>
+                  <span>Empate no exacto y pasa Marruecos</span>
                 </div>
 
                 <div className="tieScoreRow minimal">
                   <strong>1 punto</strong>
-                  <span>Otro empate y pasa Países Bajos</span>
+                  <span>Empate no exacto y pasa Países Bajos</span>
                 </div>
 
                 <div className="tieScoreRow zero">
                   <strong>0 puntos</strong>
-                  <span>Victoria pronosticada si el partido real fue empate</span>
+                  <span>Pronóstico con victoria si el partido real fue empate</span>
                 </div>
               </div>
             </div>
