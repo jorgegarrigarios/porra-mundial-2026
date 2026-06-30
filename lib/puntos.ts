@@ -53,6 +53,31 @@ export function normalizarTexto(valor: string | null | undefined) {
     .trim();
 }
 
+const CABEZAS_SERIE_DECEPCION_VALIDAS = [
+  "México",
+  "Canadá",
+  "Brasil",
+  "Estados Unidos",
+  "Alemania",
+  "Países Bajos",
+  "Bélgica",
+  "España",
+  "Francia",
+  "Argentina",
+  "Portugal",
+  "Inglaterra",
+];
+
+const CABEZAS_SERIE_DECEPCION_VALIDAS_NORMALIZADAS = new Set(
+  CABEZAS_SERIE_DECEPCION_VALIDAS.map(normalizarTexto)
+);
+
+export function esSeleccionDecepcionValida(valor: string | null | undefined) {
+  return CABEZAS_SERIE_DECEPCION_VALIDAS_NORMALIZADAS.has(
+    normalizarTexto(valor)
+  );
+}
+
 function obtenerTexto(
   fila: FilaGenerica,
   claves: string[]
@@ -332,9 +357,13 @@ function calcularPuntosBonusInterno(
     }
   }
 
+  const seleccionDecepcionResultado = resultados.seleccion_decepcion;
+
   const puntosDecepcion =
     decepcionPron &&
-    decepcionPron === normalizarTexto(resultados.seleccion_decepcion)
+    esSeleccionDecepcionValida(decepcionPronosticada) &&
+    esSeleccionDecepcionValida(seleccionDecepcionResultado) &&
+    decepcionPron === normalizarTexto(seleccionDecepcionResultado)
       ? 14
       : 0;
 
