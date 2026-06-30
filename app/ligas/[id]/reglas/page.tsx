@@ -439,17 +439,45 @@ export default function ReglasLigaPage({ params }: Props) {
             </div>
 
             <div>
-              <h3>¿Y si pronosticas empate?</h3>
+              <h3>¿Y si el partido termina empatado?</h3>
 
               <p>
-                Si pones un empate en eliminatorias, tendrás que elegir qué
-                selección pasa. Esto sirve para saber tu clasificado, pero{" "}
-                <strong>no da puntos extra</strong>.
+                En eliminatorias, si el marcador real termina en empate, también
+                cuenta la selección que se clasifica. Acertar el empate tiene
+                valor, pero para lograr el acierto completo también debes acertar
+                quién pasa de ronda.
               </p>
 
               <div className="tieExample">
-                <span>Pronóstico:</span>
-                <strong>Argentina 1 - 1 Francia · Pasa Argentina</strong>
+                <span>Ejemplo real:</span>
+                <strong>Países Bajos 1 - 1 Marruecos · Pasa Marruecos</strong>
+              </div>
+
+              <div className="tieScoringGrid">
+                <div className="tieScoreRow full">
+                  <strong>5 puntos</strong>
+                  <span>1 - 1 y pasa Marruecos</span>
+                </div>
+
+                <div className="tieScoreRow partial">
+                  <strong>3 puntos</strong>
+                  <span>1 - 1 y pasa Países Bajos</span>
+                </div>
+
+                <div className="tieScoreRow partial">
+                  <strong>3 puntos</strong>
+                  <span>Otro empate y pasa Marruecos</span>
+                </div>
+
+                <div className="tieScoreRow minimal">
+                  <strong>1 punto</strong>
+                  <span>Otro empate y pasa Países Bajos</span>
+                </div>
+
+                <div className="tieScoreRow zero">
+                  <strong>0 puntos</strong>
+                  <span>Victoria pronosticada si el partido real fue empate</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1192,6 +1220,54 @@ export default function ReglasLigaPage({ params }: Props) {
           font-weight: 900;
         }
 
+        .tieScoringGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 16px;
+        }
+
+        .tieScoreRow {
+          border-radius: 18px;
+          padding: 14px 16px;
+          background: rgba(2,6,23,0.38);
+          border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .tieScoreRow strong {
+          display: block;
+          margin-bottom: 5px;
+          font-size: 18px;
+          font-weight: 950;
+        }
+
+        .tieScoreRow span {
+          display: block;
+          color: #dbeafe;
+          line-height: 1.45;
+          font-weight: 800;
+        }
+
+        .tieScoreRow.full {
+          border-color: rgba(250,204,21,0.30);
+          background: rgba(250,204,21,0.09);
+        }
+
+        .tieScoreRow.partial {
+          border-color: rgba(34,197,94,0.26);
+          background: rgba(34,197,94,0.08);
+        }
+
+        .tieScoreRow.minimal {
+          border-color: rgba(96,165,250,0.26);
+          background: rgba(59,130,246,0.08);
+        }
+
+        .tieScoreRow.zero {
+          border-color: rgba(239,68,68,0.25);
+          background: rgba(239,68,68,0.08);
+        }
+
         .example {
           background: rgba(2,6,23,0.45);
           border-radius: 18px;
@@ -1641,6 +1717,10 @@ export default function ReglasLigaPage({ params }: Props) {
           .tieCard {
             flex-direction: column;
             padding: 18px;
+          }
+
+          .tieScoringGrid {
+            grid-template-columns: 1fr;
           }
 
           .lockRow {
