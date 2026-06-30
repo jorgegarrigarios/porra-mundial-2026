@@ -43,7 +43,14 @@ export function obtenerSignoPartido(
 }
 
 export function normalizarTexto(valor: string | null | undefined) {
-  return valor?.trim().toLowerCase() || "";
+  return (valor ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function obtenerTexto(
@@ -97,20 +104,11 @@ export function calcularPuntosEliminatoria(params: {
     pronosticoVisitante,
     resultadoLocal,
     resultadoVisitante,
-    local,
-    visitante,
     clasificadoPronosticado,
     clasificadoReal,
   } = params;
 
   if (pronosticoLocal === null || pronosticoVisitante === null) return 0;
-
-  if (
-    pronosticoLocal === resultadoLocal &&
-    pronosticoVisitante === resultadoVisitante
-  ) {
-    return 5;
-  }
 
   const signoPronosticado = obtenerSignoPartido(
     pronosticoLocal,
@@ -119,38 +117,43 @@ export function calcularPuntosEliminatoria(params: {
 
   const signoReal = obtenerSignoPartido(resultadoLocal, resultadoVisitante);
 
-  let clasificadoCalculado: string | null = null;
+  const resultadoExacto =
+    pronosticoLocal === resultadoLocal &&
+    pronosticoVisitante === resultadoVisitante;
 
-  if (signoReal === "1") {
-    clasificadoCalculado = local;
-  } else if (signoReal === "2") {
-    clasificadoCalculado = visitante;
-  } else {
-    clasificadoCalculado = clasificadoReal;
+  const diferenciaPronosticada = pronosticoLocal - pronosticoVisitante;
+  const diferenciaReal = resultadoLocal - resultadoVisitante;
+  const diferenciaCorrecta = diferenciaPronosticada === diferenciaReal;
+
+  /*
+    Regla especial de eliminatorias con empate real:
+    - El marcador del partido y el clasificado son dos partes del pronóstico.
+    - Acertar el marcador exacto sin acertar el clasificado no puede ser pleno.
+    - Acertar el empate y el clasificado sin marcador exacto equivale al acierto de signo.
+    - Acertar empate pero fallar clasificado conserva solo un acierto parcial.
+  */
+  if (signoReal === "X") {
+    const clasificadoCorrecto =
+      Boolean(clasificadoPronosticado) &&
+      Boolean(clasificadoReal) &&
+      normalizarTexto(clasificadoPronosticado) === normalizarTexto(clasificadoReal);
+
+    if (resultadoExacto && clasificadoCorrecto) return 5;
+    if (resultadoExacto) return 3;
+    if (signoPronosticado === "X" && clasificadoCorrecto) return 3;
+    if (signoPronosticado === "X" && diferenciaCorrecta) return 1;
+
+    return 0;
   }
 
-  let clasificadoPronosticoCalculado: string | null = null;
+  if (resultadoExacto) return 5;
 
-  if (signoPronosticado === "1") {
-    clasificadoPronosticoCalculado = local;
-  } else if (signoPronosticado === "2") {
-    clasificadoPronosticoCalculado = visitante;
-  } else {
-    clasificadoPronosticoCalculado = clasificadoPronosticado;
-  }
+  if (signoPronosticado === signoReal) return 3;
 
-  if (
-    clasificadoCalculado &&
-    clasificadoPronosticoCalculado &&
-    normalizarTexto(clasificadoCalculado) ===
-      normalizarTexto(clasificadoPronosticoCalculado)
-  ) {
-    return 3;
-  }
+  if (diferenciaCorrecta) return 1;
 
   return 0;
 }
-
 export function calcularPuntosClasificadosGrupo(params: {
   pronosticoClasificado1: string | null;
   pronosticoClasificado2: string | null;
