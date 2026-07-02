@@ -315,7 +315,7 @@ function construirRondasEliminatorias(partidos: PartidoEliminatoria[]): RondaEli
 }
 
 export default function ClasificacionPage() {
-  const [vista, setVista] = useState<Vista>("grupos");
+  const [vista, setVista] = useState<Vista>("eliminatorias");
   const [data, setData] = useState<ApiStandingsResponse | null>(null);
   const [partidosEliminatorias, setPartidosEliminatorias] = useState<PartidoEliminatoria[]>([]);
   const [cargando, setCargando] = useState(true);
