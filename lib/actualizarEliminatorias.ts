@@ -688,6 +688,17 @@ function crearActualizacionHorarioOficial(
   return actualizacion;
 }
 
+function partidoPermiteCorregirCruce(partido: PartidoSupabase) {
+  const sinResultado =
+    partido.resultado_local === null && partido.resultado_visitante === null;
+
+  const estado = normalizarTexto(partido.estado);
+
+  const noFinalizado = !["ft", "aet", "pen", "finalizado"].includes(estado);
+
+  return sinResultado && noFinalizado;
+}
+
 function aplicarCambioCampo(
   actualizacion: ActualizacionPartido,
   cambios: CambioPrevisto[],
@@ -701,8 +712,12 @@ function aplicarCambioCampo(
   const campoCodigo = campo === "local" ? "local_code" : "visitante_code";
   const anterior = partido[campo];
   const actualEsPlaceholder = esPlaceholderEquipo(anterior);
+  const puedeCorregirDesdeBracket =
+    origen === "bracket" &&
+    partidoPermiteCorregirCruce(partido) &&
+    !esPlaceholderEquipo(nuevo);
 
-  if (!force && !actualEsPlaceholder) return;
+  if (!force && !actualEsPlaceholder && !puedeCorregirDesdeBracket) return;
   if (normalizarEquipo(anterior) === normalizarEquipo(nuevo)) return;
 
   const codigo = esPlaceholderEquipo(nuevo) ? null : obtenerCodigoEquipo(nuevo, codigos);
