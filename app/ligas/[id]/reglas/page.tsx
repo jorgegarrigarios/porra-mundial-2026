@@ -330,6 +330,47 @@ export default function ReglasLigaPage({ params }: Props) {
               de esa liga privada.
             </span>
           </div>
+
+          <div className="tiePrizeBox">
+            <div className="tiePrizeIcon">
+              <Users size={22} />
+            </div>
+
+            <div>
+              <h3>¿Qué pasa si hay empate en puestos con premio?</h3>
+
+              <p>
+                Si dos o más participantes terminan con los mismos puntos en una
+                posición premiada, se suman los premios de las posiciones afectadas
+                y se reparten a partes iguales entre las personas empatadas.
+              </p>
+
+              <div className="tiePrizeExamples">
+                <div>
+                  <strong>Empate en 1.º entre dos participantes</strong>
+                  <span>
+                    Se suman los premios de 1.º y 2.º y se reparten al 50 %. El
+                    siguiente participante ocupa el 3.º puesto.
+                  </span>
+                </div>
+
+                <div>
+                  <strong>Empate en 2.º entre dos participantes</strong>
+                  <span>
+                    Se suman los premios de 2.º y 3.º y se reparten al 50 %.
+                  </span>
+                </div>
+
+                <div>
+                  <strong>Empate en 3.º</strong>
+                  <span>
+                    El premio del 3.º puesto se reparte a partes iguales entre las
+                    personas empatadas.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="mainCard">
@@ -1472,6 +1513,67 @@ export default function ReglasLigaPage({ params }: Props) {
           white-space: nowrap;
         }
 
+        .tiePrizeBox {
+          display: flex;
+          gap: 16px;
+          margin-top: 16px;
+          border-radius: 24px;
+          padding: 20px;
+          background:
+            linear-gradient(135deg, rgba(59,130,246,0.14), rgba(2,6,23,0.38));
+          border: 1px solid rgba(96,165,250,0.22);
+        }
+
+        .tiePrizeIcon {
+          width: 48px;
+          height: 48px;
+          border-radius: 17px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          color: #bfdbfe;
+          background: rgba(37,99,235,0.18);
+          border: 1px solid rgba(96,165,250,0.24);
+        }
+
+        .tiePrizeBox h3 {
+          margin: 0 0 8px;
+          font-size: 22px;
+          font-weight: 950;
+        }
+
+        .tiePrizeBox p {
+          margin: 0;
+          color: #cbd5e1;
+          line-height: 1.6;
+        }
+
+        .tiePrizeExamples {
+          display: grid;
+          gap: 10px;
+          margin-top: 14px;
+        }
+
+        .tiePrizeExamples div {
+          border-radius: 16px;
+          padding: 13px 14px;
+          background: rgba(2,6,23,0.34);
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .tiePrizeExamples strong {
+          display: block;
+          margin-bottom: 5px;
+          color: #fef3c7;
+        }
+
+        .tiePrizeExamples span {
+          display: block;
+          color: #dbeafe;
+          line-height: 1.5;
+        }
+
         .bonusItem ul,
         .specialItem ul {
           margin: 14px 0 0;
@@ -1673,6 +1775,11 @@ export default function ReglasLigaPage({ params }: Props) {
 
           .prizeNote {
             flex-direction: column;
+          }
+
+          .tiePrizeBox {
+            flex-direction: column;
+            padding: 18px;
           }
 
           .mainCard,
