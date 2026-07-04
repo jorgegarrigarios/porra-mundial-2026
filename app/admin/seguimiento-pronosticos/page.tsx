@@ -206,18 +206,33 @@ function estadoGlobal(usuario: SeguimientoUsuario) {
 }
 
 function crearMensajeAviso(usuarios: SeguimientoUsuario[], ligaNombre: string | null) {
-  const pendientes = usuarios.filter((usuario) => usuario.global.porcentaje < 100);
+  const pendientes = usuarios.filter(
+    (usuario) =>
+      usuario.partidosTotal.total > 0 &&
+      usuario.partidosTotal.completados < usuario.partidosTotal.total
+  );
 
   if (pendientes.length === 0) {
-    return "Todos los participantes tienen partidos, bonus y clasificados de grupo completados. No hace falta avisar a nadie.";
+    return "Todos los participantes tienen completados los partidos disponibles. No hace falta avisar a nadie.";
   }
 
-  const tituloLiga = ligaNombre ? ` de la liga ${ligaNombre}` : "";
+  const tituloLiga = ligaNombre ? ` · ${ligaNombre}` : "";
   const lineas = pendientes
-    .map((usuario) => `- ${nombreVisible(usuario.participante)}: global ${usuario.global.porcentaje}% · partidos ${usuario.partidosTotal.completados}/${usuario.partidosTotal.total} · bonus ${usuario.bonus.completados}/${usuario.bonus.total} · grupos ${usuario.grupos.completados}/${usuario.grupos.total}`)
+    .map((usuario) => {
+      const partidosPendientes =
+        usuario.partidosTotal.total - usuario.partidosTotal.completados;
+      const porcentajePendiente = calcularPorcentaje(
+        partidosPendientes,
+        usuario.partidosTotal.total
+      );
+
+      return `- ${nombreVisible(
+        usuario.participante
+      )}: ${porcentajePendiente}% de partidos pendientes`;
+    })
     .join("\n");
 
-  return `Recordatorio Porra Mundial 2026${tituloLiga}:\n\nEstos usuarios todavía no tienen completados todos los apartados:\n\n${lineas}\n\nImportante: bonus y clasificados de grupo se cierran al empezar el Mundial. Los partidos se cierran individualmente cuando empieza cada partido.`;
+  return `⚠️ Recordatorio de pronósticos${tituloLiga}\n\nA estos participantes todavía les quedan partidos por pronosticar:\n\n${lineas}\n\nRevisad vuestros pronósticos antes del inicio de cada partido.`;
 }
 
 export default function AdminSeguimientoPronosticosPage() {
@@ -407,7 +422,7 @@ export default function AdminSeguimientoPronosticosPage() {
     const texto = crearMensajeAviso(usuariosFiltrados, ligaSeleccionada?.nombre ?? null);
     try {
       await navigator.clipboard.writeText(texto);
-      setMensaje("Mensaje copiado. Ya puedes pegarlo en WhatsApp, email o Discord.");
+      setMensaje("Aviso de partidos pendientes copiado. Ya puedes pegarlo en WhatsApp.");
       setError("");
     } catch {
       setError("No se ha podido copiar el mensaje automáticamente.");
