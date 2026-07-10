@@ -314,15 +314,67 @@ function fixtureFinalizado(fixture: FixtureApiFootball) {
   return ESTADOS_FINALIZADOS.has(estado);
 }
 
-function obtenerClasificadoReal(
-  fixture: FixtureApiFootball,
-  partido: PartidoSupabase
+function equiposCoinciden(
+  equipoA: string | null | undefined,
+  equipoB: string | null | undefined
 ) {
+  const normalizadoA = normalizarEquipo(equipoA);
+  const normalizadoB = normalizarEquipo(equipoB);
+
+  return Boolean(normalizadoA && normalizadoB && normalizadoA === normalizadoB);
+}
+
+type MapeoResultadoFixture = {
+  resultadoLocal: number;
+  resultadoVisitante: number;
+  clasificadoReal: string | null;
+  orden: "directo" | "invertido";
+};
+
+function crearMapeoResultadoFixture(
+  fixture: FixtureApiFootball,
+  partido: PartidoSupabase,
+  golesHome: number,
+  golesAway: number
+): MapeoResultadoFixture | null {
+  const homeApi = fixture.teams?.home?.name;
+  const awayApi = fixture.teams?.away?.name;
   const homeWinner = fixture.teams?.home?.winner;
   const awayWinner = fixture.teams?.away?.winner;
 
-  if (homeWinner === true) return partido.local;
-  if (awayWinner === true) return partido.visitante;
+  const homeEsLocal = equiposCoinciden(homeApi, partido.local);
+  const awayEsVisitante = equiposCoinciden(awayApi, partido.visitante);
+
+  if (homeEsLocal && awayEsVisitante) {
+    return {
+      resultadoLocal: golesHome,
+      resultadoVisitante: golesAway,
+      clasificadoReal:
+        homeWinner === true
+          ? partido.local
+          : awayWinner === true
+          ? partido.visitante
+          : null,
+      orden: "directo",
+    };
+  }
+
+  const homeEsVisitante = equiposCoinciden(homeApi, partido.visitante);
+  const awayEsLocal = equiposCoinciden(awayApi, partido.local);
+
+  if (homeEsVisitante && awayEsLocal) {
+    return {
+      resultadoLocal: golesAway,
+      resultadoVisitante: golesHome,
+      clasificadoReal:
+        homeWinner === true
+          ? partido.visitante
+          : awayWinner === true
+          ? partido.local
+          : null,
+      orden: "invertido",
+    };
+  }
 
   return null;
 }
@@ -398,24 +450,36 @@ function crearActualizacion(
     return Object.keys(actualizacion).length > 0 ? actualizacion : null;
   }
 
-  /*
-    Blindaje importante:
-    Si API-Football marca el partido como finalizado (FT, AET o PEN),
-    el marcador definitivo debe ser la fuente de verdad aunque ya hubiera
-    un resultado previo guardado.
+  const mapeoResultado = crearMapeoResultadoFixture(
+    fixture,
+    partido,
+    golesLocal,
+    golesVisitante
+  );
 
-    Esto evita que un marcador provisional o una corrección posterior de la API
-    se quede bloqueada para siempre.
-  */
-  if (
-    partido.resultado_local !== golesLocal ||
-    partido.resultado_visitante !== golesVisitante
-  ) {
-    actualizacion.resultado_local = golesLocal;
-    actualizacion.resultado_visitante = golesVisitante;
+  if (!mapeoResultado) {
+    return Object.keys(actualizacion).length > 0 ? actualizacion : null;
   }
 
-  const clasificadoReal = obtenerClasificadoReal(fixture, partido);
+  /*
+    Blindaje importante:
+    API-FOOTBALL devuelve los goles como home/away, pero en nuestra tabla
+    el partido puede estar guardado en el orden local/visitante contrario.
+
+    Por eso antes de guardar el resultado comparamos los nombres reales de la
+    API con local/visitante. Si el orden está invertido, también invertimos los
+    goles y el clasificado_real para respetar el orden que vieron los usuarios
+    al hacer sus pronósticos.
+  */
+  if (
+    partido.resultado_local !== mapeoResultado.resultadoLocal ||
+    partido.resultado_visitante !== mapeoResultado.resultadoVisitante
+  ) {
+    actualizacion.resultado_local = mapeoResultado.resultadoLocal;
+    actualizacion.resultado_visitante = mapeoResultado.resultadoVisitante;
+  }
+
+  const clasificadoReal = mapeoResultado.clasificadoReal;
 
   if (clasificadoReal && partido.clasificado_real !== clasificadoReal) {
     actualizacion.clasificado_real = clasificadoReal;

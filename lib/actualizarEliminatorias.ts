@@ -386,6 +386,16 @@ function normalizarEquipo(valor: string | null | undefined) {
   return ALIAS_EQUIPOS[normalizado] ?? normalizado;
 }
 
+function equiposCoinciden(
+  equipoA: string | null | undefined,
+  equipoB: string | null | undefined
+) {
+  const normalizadoA = normalizarEquipo(equipoA);
+  const normalizadoB = normalizarEquipo(equipoB);
+
+  return Boolean(normalizadoA && normalizadoB && normalizadoA === normalizadoB);
+}
+
 function traducirEquipo(nombreApi: string | undefined) {
   if (!nombreApi) return "";
 
@@ -801,16 +811,45 @@ function obtenerClasificadoDesdeFixture(
 
   if (!fixtureTieneEquiposReales(fixture ?? {})) return null;
 
-  if (fixture?.teams?.home?.winner === true && partido.local && !esPlaceholderEquipo(partido.local)) {
-    return partido.local;
+  const homeApi = fixture?.teams?.home?.name;
+  const awayApi = fixture?.teams?.away?.name;
+  const homeWinner = fixture?.teams?.home?.winner;
+  const awayWinner = fixture?.teams?.away?.winner;
+
+  const homeEsLocal = equiposCoinciden(homeApi, partido.local);
+  const awayEsVisitante = equiposCoinciden(awayApi, partido.visitante);
+
+  if (homeEsLocal && awayEsVisitante) {
+    if (homeWinner === true && partido.local && !esPlaceholderEquipo(partido.local)) {
+      return partido.local;
+    }
+
+    if (
+      awayWinner === true &&
+      partido.visitante &&
+      !esPlaceholderEquipo(partido.visitante)
+    ) {
+      return partido.visitante;
+    }
+
+    return null;
   }
 
-  if (
-    fixture?.teams?.away?.winner === true &&
-    partido.visitante &&
-    !esPlaceholderEquipo(partido.visitante)
-  ) {
-    return partido.visitante;
+  const homeEsVisitante = equiposCoinciden(homeApi, partido.visitante);
+  const awayEsLocal = equiposCoinciden(awayApi, partido.local);
+
+  if (homeEsVisitante && awayEsLocal) {
+    if (
+      homeWinner === true &&
+      partido.visitante &&
+      !esPlaceholderEquipo(partido.visitante)
+    ) {
+      return partido.visitante;
+    }
+
+    if (awayWinner === true && partido.local && !esPlaceholderEquipo(partido.local)) {
+      return partido.local;
+    }
   }
 
   return null;
